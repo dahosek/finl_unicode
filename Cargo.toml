@@ -1,0 +1,24 @@
+[package]
+name = "finl_unicode"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.56"
+
+[dev-dependencies]
+criterion = "0.3.3"
+unicode_categories = "0.1.1"
+
+
+[features]
+categories = []
+clusters = []
+
+[build-dependencies]
+reqwest = {version="0.11.10", features=["blocking"] }
+anyhow = "1.0.56"
+
+[[bench]]
+name = "categories"
+harness = false
