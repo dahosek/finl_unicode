@@ -346,7 +346,7 @@ impl CharacterCategories for char {
     fn is_format(self) -> bool {
         get_code(self) == Cat::Cf
     }
-    
+
     #[inline]
     fn is_private_use(self) -> bool {
         get_code(self) == Cat::Co
