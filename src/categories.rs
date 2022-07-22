@@ -109,6 +109,7 @@ pub trait CharacterCategories {
 
 struct Cat;
 impl Cat {
+    #![allow(non_upper_case_globals)]
     const Lu: u8 = 0x90;
     const Ll: u8 = 0x91;
     const Lt: u8 = 0x92;

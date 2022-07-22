@@ -7,9 +7,11 @@ edition = "2021"
 anyhow = "1.0.56"
 
 [dev-dependencies]
-criterion = "0.3.3"
+criterion = { version = "0.3.5", feature=["html_reports"]}
 unicode_categories = "0.1.1"
-
+finl_unicode = {path=".", features=["clusters", "categories"]}
+unicode-segmentation = "1.9.0"
+bstr = "0.2.17"
 
 [features]
 categories = []
@@ -17,8 +19,12 @@ clusters = []
 
 [build-dependencies]
 reqwest = {version="0.11.10", features=["blocking"] }
-anyhow = "1.0.56"
+anyhow = "1.0.57"
+
+#[[bench]]
+#name = "categories"
+#harness = false
 
 [[bench]]
-name = "categories"
+name = "grapheme_clusters"
 harness = false

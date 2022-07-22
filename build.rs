@@ -176,6 +176,10 @@ fn build_grapheme_break_test(out_dir: &OsString, grapheme_break_test_txt: &PathB
     let mut grapheme_test_rs = File::create(grapheme_test_rs)?;
     let grapheme_break_test = File::open(grapheme_break_test_txt)?;
     let grapheme_break_test = BufReader::new(grapheme_break_test);
+    let mut grapheme_bench_txt = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    grapheme_bench_txt.push("resources");
+    grapheme_bench_txt.push("graphemes.txt");
+    let mut grapheme_bench_txt = File::create(grapheme_bench_txt)?;
 
     writeln!(grapheme_test_rs, "{{")?;
     for line in grapheme_break_test.lines() {
@@ -185,6 +189,7 @@ fn build_grapheme_break_test(out_dir: &OsString, grapheme_break_test_txt: &PathB
                 let mut input_string = String::new();
                 let mut output_string:Vec<String> = vec!();
                 let mut current_grapheme = String::new();
+                writeln!(grapheme_bench_txt, "{}", map)?;
                 for token in map.split_whitespace() {
                     match token {
                         "÷" => {
@@ -195,12 +200,14 @@ fn build_grapheme_break_test(out_dir: &OsString, grapheme_break_test_txt: &PathB
                         }
                         "×" => {} // No action necessary here (!)
                         hex_code => {
+                            write!(grapheme_bench_txt, "{}", char::from_u32(u32::from_str_radix(hex_code, 16).unwrap()).unwrap())?;
                             let hex_code = "\\u{".to_string() + hex_code + "}";
                             input_string.push_str(&hex_code);
                             current_grapheme.push_str(&hex_code);
                         }
                     }
                 }
+                writeln!(grapheme_bench_txt)?;
                 let output_string = output_string.join("\", \"");
 
                 writeln!(grapheme_test_rs, "\tgrapheme_test(\"{input_string}\",\n\t\t&[\"{output_string}\"],\n\t\t\"{comment}\"\n\t);")?;
