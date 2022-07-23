@@ -14,6 +14,6 @@
 #[cfg(feature = "categories")]
 pub mod categories;
 
-#[cfg(feature = "clusters")]
+#[cfg(feature = "grapheme_clusters")]
 pub mod grapheme_clusters;
 
