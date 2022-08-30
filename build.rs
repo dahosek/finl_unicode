@@ -5,25 +5,21 @@ use std::fs::File;
 use std::io::{BufRead, BufReader,Write};
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
-use reqwest::blocking::Client;
 use itertools::Itertools;
 
 fn main() -> anyhow::Result<()> {
     let unicode_version = "14.0.0";
     let out_dir = env::var_os("OUT_DIR").unwrap();
-    let data_dir = Path::new(&out_dir).join("data").join(unicode_version);
+    let base_dir = env::var_os("CARGO_MANIFEST_DIR").unwrap();
+    let data_dir = Path::new(&base_dir).join("resources").join(unicode_version);
     std::fs::create_dir_all(&data_dir)?;
     let unicode_data_txt = data_dir.join("UnicodeData.txt");
     let grapheme_break_test_txt = data_dir.join("GraphemeBreakTest.txt");
     let grapheme_break_property_txt = data_dir.join("GraphemeBreakProperty.txt");
     let emoji_data_txt = data_dir.join("emoji-data.txt");
 
-    download_unicode_data(&unicode_data_txt, "ucd/UnicodeData.txt", unicode_version)?;
     build_character_tables(&out_dir, &unicode_data_txt)?;
-    download_unicode_data(&grapheme_break_test_txt, "ucd/auxiliary/GraphemeBreakTest.txt", unicode_version)?;
     build_grapheme_break_test(&out_dir, &grapheme_break_test_txt)?;
-    download_unicode_data(&grapheme_break_property_txt, "ucd/auxiliary/GraphemeBreakProperty.txt", unicode_version)?;
-    download_unicode_data(&emoji_data_txt, "ucd/emoji/emoji-data.txt", unicode_version)?;
     build_grapheme_break_property(&out_dir, &grapheme_break_property_txt, &emoji_data_txt)?;
     Ok(())
 }
@@ -328,13 +324,3 @@ fn build_grapheme_break_property(out_dir: &OsString, grapheme_break_property_txt
 }
 
 
-fn download_unicode_data(local_txt_data_file: &PathBuf, remote_txt_data_file: &str, unicode_version: &str) -> anyhow::Result<()> {
-    let url_base = "https://www.unicode.org/Public/".to_owned() + unicode_version + "/";
-    let client = Client::new();
-    if !local_txt_data_file.exists() {
-        let mut remote_data = client.get(url_base.clone() + remote_txt_data_file).send()?;
-        let mut file = File::create(local_txt_data_file)?;
-        std::io::copy(&mut remote_data, &mut file)?;
-    }
-    Ok(())
-}
