@@ -1,14 +1,16 @@
 use std::collections::{HashMap, HashSet};
 use std::env;
+use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufRead, BufReader,Write};
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
-use reqwest::blocking::Client;
-use itertools::Itertools;
 
-fn main() -> anyhow::Result<()> {
+use itertools::Itertools;
+use reqwest::blocking::Client;
+
+fn main() -> Result<(), Box<dyn Error>> {
     let unicode_version = "14.0.0";
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let data_dir = Path::new(&out_dir).join("data").join(unicode_version);
@@ -112,7 +114,7 @@ fn cat_to_u8(cat: &str) -> u8 {
 
 // Credit to https://here-be-braces.com/fast-lookup-of-unicode-properties/ for the broad outline of
 // how this would work. The coding of categories into bytes is my own.
-fn build_character_tables(out_dir: &OsStr, unicode_data_txt: &PathBuf) -> anyhow::Result<()> {
+fn build_character_tables(out_dir: &OsStr, unicode_data_txt: &PathBuf) -> Result<(), Box<dyn Error>> {
     let characters_rs = Path::new(out_dir).join("characters.rs");
     let mut characters_rs = File::create(characters_rs)?;
     let unicode_data = File::open(unicode_data_txt)?;
@@ -183,7 +185,7 @@ fn build_character_tables(out_dir: &OsStr, unicode_data_txt: &PathBuf) -> anyhow
     Ok(())
 }
 
-fn build_grapheme_break_test(out_dir: &OsString, grapheme_break_test_txt: &PathBuf) -> anyhow::Result<()>  {
+fn build_grapheme_break_test(out_dir: &OsString, grapheme_break_test_txt: &PathBuf) -> Result<(), Box<dyn Error>> {
     let grapheme_test_rs = Path::new(out_dir).join("grapheme_test.rs");
     let mut grapheme_test_rs = File::create(grapheme_test_rs)?;
     let grapheme_break_test = File::open(grapheme_break_test_txt)?;
@@ -262,7 +264,7 @@ fn str_to_range(range: &str) -> RangeInclusive<usize> {
     }
 }
 
-fn build_grapheme_break_property(out_dir: &OsString, grapheme_break_property_txt: &PathBuf, emoji_data_txt: &PathBuf) -> anyhow::Result<()> {
+fn build_grapheme_break_property(out_dir: &OsString, grapheme_break_property_txt: &PathBuf, emoji_data_txt: &PathBuf) -> Result<(), Box<dyn Error>> {
     let grapheme_property_rs = Path::new(out_dir).join("grapheme_property.rs");
     let mut grapheme_property_rs = File::create(grapheme_property_rs)?;
     let grapheme_break_property = File::open(grapheme_break_property_txt)?;
@@ -328,7 +330,7 @@ fn build_grapheme_break_property(out_dir: &OsString, grapheme_break_property_txt
 }
 
 
-fn download_unicode_data(local_txt_data_file: &PathBuf, remote_txt_data_file: &str, unicode_version: &str) -> anyhow::Result<()> {
+fn download_unicode_data(local_txt_data_file: &PathBuf, remote_txt_data_file: &str, unicode_version: &str) -> Result<(), Box<dyn Error>> {
     let url_base = "https://www.unicode.org/Public/".to_owned() + unicode_version + "/";
     let client = Client::new();
     if !local_txt_data_file.exists() {

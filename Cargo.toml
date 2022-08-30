@@ -8,13 +8,9 @@ categories = ["text-processing", "internationalization"]
 description = "Library for handling Unicode functionality for finl (categories and grapheme segmentation)"
 homepage = "https://finl.xyz"
 
-[dependencies]
-anyhow = "1.0.5"
-
 [dev-dependencies]
 criterion = { version = "0.3.5", features=["html_reports"]}
 unicode_categories = "0.1.1"
-finl_unicode = {path=".", features=["grapheme_clusters", "categories"]}
 unicode-segmentation = "1.9.0"
 bstr = "0.2.17"
 
@@ -25,7 +21,6 @@ grapheme_clusters = []
 
 [build-dependencies]
 reqwest = {version="0.11.10", features=["blocking"] }
-anyhow = "1.0.57"
 itertools = "0.10.3"
 
 [[bench]]
