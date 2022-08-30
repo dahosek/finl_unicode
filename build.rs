@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -6,6 +6,7 @@ use std::io::{BufRead, BufReader,Write};
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 use reqwest::blocking::Client;
+use itertools::Itertools;
 
 fn main() -> anyhow::Result<()> {
     let unicode_version = "14.0.0";
@@ -101,11 +102,11 @@ fn cat_to_u8(cat: &str) -> u8 {
         "Zs" => 0x50,
         "Zl" => 0x51,
         "Zp" => 0x52,
-        "Cc" => 0x01,
-        "Cf" => 0x02,
-        "Cs" => 0x03,
-        "Co" => 0x04,
-        _ => 0x00 // Anything we don't recognize is x00, which is Cn - Unassigned
+        "Cc" => 0x61,
+        "Cf" => 0x62,
+        "Cs" => 0x63,
+        "Co" => 0x64,
+        _ => 0x60 // Anything we don't recognize is x60, which is Cn - Unassigned
     }
 }
 
@@ -119,7 +120,7 @@ fn build_character_tables(out_dir: &OsStr, unicode_data_txt: &PathBuf) -> anyhow
 
     // First we build a raw (large) index of all the character codes in numeric format
     // Note that we actually allocate an array slightly larger than Unicode uses
-    let mut raw_categories = [0u8;0x110000];
+    let mut raw_categories = [0x60u8;0x110000];
     let mut range_start = 0;
     for line in unicode_data.lines() {
         let line = line.unwrap();
@@ -147,26 +148,37 @@ fn build_character_tables(out_dir: &OsStr, unicode_data_txt: &PathBuf) -> anyhow
     }
 
     // Then we break it down into pages (wrapping the result with a bit of Rust boilerplate)
-    writeln!(characters_rs, "const CAT_TABLE: [Either;0x1100] = [")?;
-    let mut cat_pages = vec!();
-    let mut page_number = 0;
+    writeln!(characters_rs, "const CAT_TABLE: [u8;0x1100] = [")?;
+    let mut page_index = HashMap::new();
+    let mut page_number = 0u8;
     for page in 0 .. 0x1100 {
         let page_start = page << 8;
-        let mut values_seen: HashSet<u8> = raw_categories[page_start..page_start+0x100].iter().map(|x| *x).collect();
-        values_seen.remove(&0);
-        if values_seen.len() <= 1 {
-            let single_code = values_seen.iter().next().cloned().unwrap_or(0);
-            // There was only one code present in the page
-            writeln!(characters_rs, "\tEither::Code({single_code:#x}), // {page:#x}")?;
+        let page_data  = raw_categories[page_start..page_start+0x100].to_vec();
+        let &mut page_ref = page_index.entry(page_data).or_insert(page_number);
+        if page_ref == page_number {
+            page_number += 1
         }
-        else {
-            writeln!(characters_rs, "\tEither::Page({page_number}), // {page:#x} -- {}", values_seen.len())?;
-
-            cat_pages.push(raw_categories[page_start..page_start+0x100].to_vec());
-            page_number += 1;
-        }
+        writeln!(characters_rs, "\t {page_ref}, // {page:#x}")?;
+        // let mut values_seen: HashSet<u8> = raw_categories[page_start..page_start+0x100].iter().map(|x| *x).collect();
+        // values_seen.remove(&0);
+        // if values_seen.len() <= 1 {
+        //     let single_code = values_seen.iter().next().cloned().unwrap_or(0);
+        //     // There was only one code present in the page
+        //     writeln!(characters_rs, "\tEither::Code({single_code:#x}), // {page:#x}")?;
+        // }
+        // else {
+        //     writeln!(characters_rs, "\tEither::Page({page_number}), // {page:#x} -- {}", values_seen.len())?;
+        //
+        //     cat_pages.push(raw_categories[page_start..page_start+0x100].to_vec());
+        //     page_number += 1;
+        // }
     }
     writeln!(characters_rs, "];")?;
+    let cat_pages = page_index.iter()
+        .map(|(k, v)| (v,k))
+        .sorted_by(|(a,_),(b,_)| Ord::cmp(a,b))
+        .map(|(_, page)| page )
+        .collect_vec();
     writeln!(characters_rs, "const CAT_PAGES: [[u8;256];{}] = {cat_pages:#x?};", cat_pages.len())?;
     Ok(())
 }

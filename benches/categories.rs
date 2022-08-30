@@ -11,7 +11,7 @@ mod finl_test {
 
     #[inline]
     pub fn lc_test(c: &char) -> bool {
-        c.is_lowercase_letter()
+        c.is_letter_lowercase()
     }
 }
 

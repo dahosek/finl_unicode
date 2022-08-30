@@ -9,6 +9,9 @@
 //! - **Character category**. (Specify `categories` as a feature when importing the crate.) Extends the `char` class with methods for testing the
 //!   category of the character.
 //!
+//! The default is to compile all features. Note that the Rust compiler/linker will not automatically
+//! link unused code, so you most of the time, there will be no need to remove features.
+//!
 //! Building the crate runs a build script which connects to unicode.org to download the data files.
 
 #[cfg(feature = "categories")]

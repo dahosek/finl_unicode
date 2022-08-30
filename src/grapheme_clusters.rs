@@ -1,23 +1,47 @@
+//! This module provides two interfaces for accessing clusters from an underlying string. The
+//! `GraphemeCluster` trait extends the `Peekable` iterators over `Chars` or `CharIndices`
+//! to add a `next_cluster` method which returns `Option<String>` with the next
+//! cluster if one exists. This is the best method for getting individual clusters from a stream which is normally
+//! only getting `char`s but is not recommended if you wish to iterate over clusters.
+//! ```
+//! # use crate::finl_unicode::grapheme_clusters::GraphemeCluster;
+//! let mut char_iterator = "A\u{301}✋🏽🇦🇹!".chars().peekable();
+//! assert_eq!(char_iterator.next_cluster(), Some("A\u{301}".to_string()));
+//! assert_eq!(char_iterator.next_cluster(), Some("✋🏽".to_string()));
+//! assert_eq!(char_iterator.next_cluster(), Some("🇦🇹".to_string()));
+//! assert_eq!(char_iterator.next_cluster(), Some("!".to_string()));
+//! assert_eq!(char_iterator.next_cluster(), None);
+//! ```
+//!
+//! For the iterating over clusters case there is a struct `Graphemes` which implements `iterator`
+//! and can be constructed from a `&str`. This returns references to substrings of the original
+//! `&str` and is more performant for that case than the extended iterator provided through
+//! `GraphemeCluster` which allocates a new `String` for each cluster found.
+//! ```
+//! # use crate::finl_unicode::grapheme_clusters::Graphemes;
+//! let graphemes = Graphemes::new("A\u{301}✋🏽🇦🇹!");
+//! assert_eq!(graphemes.collect::<Vec<&str>>(), ["A\u{301}", "✋🏽", "🇦🇹", "!"])
+//! ```
+
 use std::iter::Peekable;
 use std::str::CharIndices;
+use std::str::Chars;
 
-// use crate::grapheme_clusters::ClusterCategory::{EXTEND, PREPEND, SPACING_MARK, ZWJExtCccZwj};
-use crate::grapheme_clusters::ClusterMachineState::{CcsBase, CcsExtend, CrLf, Emoji, EmojiZWJ, Flag, HangulSyllableL, HangulSyllableT, HangulSyllableV, Other, Precore, Start};
 
-/// Get the next grapheme cluster from a stream of characters or char indices
-///
-pub trait GraphemeCluster {
-    fn next_cluster(&mut self) -> Option<String>;
-}
-
+/// `Graphemes` provides an iterator over the grapheme clusters of a string.
 pub struct Graphemes<'a> {
     input: &'a str,
     iter: Peekable<CharIndices<'a>>,
 }
 
 impl<'a> Graphemes<'a> {
+    /// A new instance of graphemes can be constructed from a string using `Graphemes::new`
+    /// ```
+    /// # use crate::finl_unicode::grapheme_clusters::Graphemes;
+    /// let graphemes = Graphemes::new("some string");
+    /// ```
     pub fn new(input: &'a str) -> Graphemes<'a> {
-        let mut iter = input.char_indices().peekable();
+        let iter = input.char_indices().peekable();
         Graphemes {
             input,
             iter
@@ -28,6 +52,9 @@ impl<'a> Graphemes<'a> {
 impl<'a> Iterator for Graphemes<'a> {
     type Item = &'a str;
     #[inline]
+    /// Return a slice of the underlying
+    /// string corresponding to the next cluster if one exists, or `None` if the end of the string
+    /// has been reached.
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(&(start, _)) = self.iter.peek() {
             let mut cluster_machine = ClusterMachine::new();
@@ -59,15 +86,23 @@ impl<'a> Iterator for Graphemes<'a> {
     }
 }
 
-/// We implement the trait for the struct `Peekable<CharIndices>`.
-impl GraphemeCluster for Peekable<CharIndices<'_>> {
+/// Get the next grapheme cluster from a stream of characters or char indices
+/// This trait is implemented for `Peekable<CharIndices>` and `Peekable<Chars>`.
+pub trait GraphemeCluster<T> {
+    fn next_cluster(&mut self) -> Option<String>;
+}
+
+impl<T> GraphemeCluster<T> for T where T: PeekChar {
+    /// Returns the next cluster if there is one in an `Option<String>`. Since this has a heap allocation
+    /// it is *not* recommended for iterating over all the clusters in a string. In that case, use
+    /// `Graphemes` instead.
     #[inline]
     fn next_cluster(&mut self) -> Option<String> {
-        if self.peek().is_some() {
+        if self.has_next() {
             let mut cluster_machine = ClusterMachine::new();
             let mut rv = String::new();
             loop {
-                if let Some(&(_, ch)) = self.peek() {
+                if let Some(&ch) = self.peek_char() {
                     let state = cluster_machine.find_cluster(ch);
                     match state {
                         Break::None => {
@@ -90,8 +125,47 @@ impl GraphemeCluster for Peekable<CharIndices<'_>> {
             None
         }
     }
+
 }
 
+/// This trait exists primarily to allow a single implementation to be used for both `Peekable<Chars>`
+/// and `Peekable<CharIndices>`. You could implement this for some other iterator if you like as
+/// long as you can implement the two methods below.
+pub trait PeekChar: Iterator {
+    /// Returns the next character (if it exists) or `None` otherwise.
+    fn peek_char(&mut self) -> Option<&char>;
+    /// Returns `true` if there is another character available on the iterator, `false` otherwise.
+    fn has_next(&mut self) -> bool;
+}
+
+
+impl PeekChar for Peekable<Chars<'_>> {
+    #[inline]
+    fn peek_char(&mut self) -> Option<&char> {
+        self.peek()
+    }
+
+    #[inline]
+    fn has_next(&mut self) -> bool {
+        self.peek().is_some()
+    }
+
+}
+
+impl PeekChar for Peekable<CharIndices<'_>> {
+    #[inline]
+    fn peek_char(&mut self) -> Option<&char> {
+        self.peek().map(|(_, ch)|  ch)
+    }
+
+    #[inline]
+    fn has_next(&mut self) -> bool {
+        self.peek().is_some()
+    }
+}
+
+// ------------------------
+// Private implementation details follow
 
 #[derive(PartialEq)]
 enum ClusterMachineState {
@@ -105,7 +179,6 @@ enum ClusterMachineState {
     CcsExtend,
     Flag,
     Emoji,
-    EmojiExtend,
     EmojiZWJ,
     Other,
 }
@@ -125,7 +198,7 @@ impl ClusterMachine {
     #[inline]
     pub fn new() -> ClusterMachine {
         ClusterMachine {
-            state: Start,
+            state: ClusterMachineState::Start,
         }
     }
 
@@ -133,45 +206,45 @@ impl ClusterMachine {
     /// If the `bool` is true, it means that we are also consuming the character  in the cluster.
     #[inline]
     pub fn find_cluster(&mut self, c: char) -> Break {
-        if self.state == Start {
+        if self.state == ClusterMachineState::Start {
             return self.first_character(c);
         }
         let property = get_property(c);
 
         if property == GraphemeProperty::CONTROL {
-            return if self.state == CrLf && c == '\n' {
-                self.state = Start;
+            return if self.state == ClusterMachineState::CrLf && c == '\n' {
+                self.state = ClusterMachineState::Start;
                 Break::After
             } else {
                 if c == '\r' {
-                    self.state = CrLf;
+                    self.state = ClusterMachineState::CrLf;
                 } else {
-                    self.state = Start;
+                    self.state = ClusterMachineState::Start;
                 }
                 Break::Before
             }
         }
 
         match self.state {
-            Start => self.first_character(c),
-            Precore => {
+            ClusterMachineState::Start => self.first_character(c),
+            ClusterMachineState::Precore => {
                 self.first_character(c);
                 Break::None
             }
 
-            HangulSyllableL => {
+            ClusterMachineState::HangulSyllableL => {
                 match property {
                     GraphemeProperty::L => Break::None,
                     GraphemeProperty::V | GraphemeProperty::LV => {
-                        self.state = HangulSyllableV;
+                        self.state = ClusterMachineState::HangulSyllableV;
                         Break::None
                     }
                     GraphemeProperty::LVT => {
-                        self.state = HangulSyllableT;
+                        self.state = ClusterMachineState::HangulSyllableT;
                         Break::None
                     }
                     GraphemeProperty::EXTEND | GraphemeProperty::SPACING_MARK | GraphemeProperty::ZWJ => {
-                        self.state = CcsBase;
+                        self.state = ClusterMachineState::CcsBase;
                         Break::None
                     }
                     _ => {
@@ -180,15 +253,15 @@ impl ClusterMachine {
                     }
                 }
             }
-            HangulSyllableV => {
+            ClusterMachineState::HangulSyllableV => {
                 match property {
                     GraphemeProperty::V => Break::None,
                     GraphemeProperty::T => {
-                        self.state = HangulSyllableT;
+                        self.state = ClusterMachineState::HangulSyllableT;
                         Break::None
                     }
                     GraphemeProperty::EXTEND | GraphemeProperty::SPACING_MARK | GraphemeProperty::ZWJ => {
-                        self.state = CcsBase;
+                        self.state = ClusterMachineState::CcsBase;
                         Break::None
                     }
                     _ => {
@@ -197,11 +270,11 @@ impl ClusterMachine {
                     }
                 }
             }
-            HangulSyllableT => {
+            ClusterMachineState::HangulSyllableT => {
                 match property {
                     GraphemeProperty::T => Break::None,
                     GraphemeProperty::EXTEND | GraphemeProperty::SPACING_MARK | GraphemeProperty::ZWJ => {
-                        self.state = CcsBase;
+                        self.state = ClusterMachineState::CcsBase;
                         Break::None
                     }
                     _ => {
@@ -210,7 +283,7 @@ impl ClusterMachine {
                     }
                 }
             }
-            CcsExtend => {
+            ClusterMachineState::CcsExtend => {
                 match property {
                     GraphemeProperty::EXTEND
                     | GraphemeProperty::SPACING_MARK
@@ -218,17 +291,17 @@ impl ClusterMachine {
                     _ => Break::Before
                 }
             }
-            Flag => {
-                self.state = Start;
+            ClusterMachineState::Flag => {
+                self.state = ClusterMachineState::Start;
                 match property {
                     GraphemeProperty::REGIONAL_INDICATOR => {
-                        self.state = Other;
+                        self.state = ClusterMachineState::Other;
                         Break::None
                     }
                     GraphemeProperty::EXTEND
                     | GraphemeProperty::SPACING_MARK
                     | GraphemeProperty::ZWJ => {
-                        self.state = CcsExtend;
+                        self.state = ClusterMachineState::CcsExtend;
                         Break::None
                     }
                     _ => {
@@ -237,14 +310,14 @@ impl ClusterMachine {
                     }
                 }
             }
-            Emoji => {
+            ClusterMachineState::Emoji => {
                 match property {
                     GraphemeProperty::ZWJ => {
-                        self.state = EmojiZWJ;
+                        self.state = ClusterMachineState::EmojiZWJ;
                         Break::None
                     }
                     GraphemeProperty::EXTEND | GraphemeProperty::SPACING_MARK => {
-                        self.state = Emoji;
+                        self.state = ClusterMachineState::Emoji;
                         Break::None
                     }
                     _ => {
@@ -253,15 +326,15 @@ impl ClusterMachine {
                     }
                 }
             }
-            EmojiZWJ => {
+            ClusterMachineState::EmojiZWJ => {
                 if property == GraphemeProperty::EXTENDED_GRAPHEME {
-                    self.state = Emoji;
+                    self.state = ClusterMachineState::Emoji;
                     Break::None
                 } else {
                     Break::Before
                 }
             }
-            CrLf => Break::Before,
+            ClusterMachineState::CrLf => Break::Before,
             _ => {
                 if is_continuation(property) {
                     Break::None
@@ -275,51 +348,47 @@ impl ClusterMachine {
     #[inline]
     fn first_character(&mut self, c: char) -> Break {
         if c == '\r' {
-            self.state = CrLf;
+            self.state = ClusterMachineState::CrLf;
             return Break::None;
         }
         let property = get_property(c);
         if property == GraphemeProperty::CONTROL {
-            self.state = Start;
+            self.state = ClusterMachineState::Start;
             return Break::After;
         }
         match property {
             GraphemeProperty::PREPEND => {
-                self.state = Precore;
+                self.state = ClusterMachineState::Precore;
             }
             GraphemeProperty::EXTEND => {
-                self.state = CcsExtend;
+                self.state = ClusterMachineState::CcsExtend;
             }
             GraphemeProperty::SPACING_MARK => {
-                self.state = CcsExtend;
+                self.state = ClusterMachineState::CcsExtend;
             }
             GraphemeProperty::L => {
-                self.state = HangulSyllableL;
+                self.state = ClusterMachineState::HangulSyllableL;
             }
             GraphemeProperty::V => {
-                self.state = HangulSyllableV;
+                self.state = ClusterMachineState::HangulSyllableV;
             }
             GraphemeProperty::T => {
-                self.state = HangulSyllableT;
+                self.state = ClusterMachineState::HangulSyllableT;
             }
             GraphemeProperty::LV => {
-                self.state = HangulSyllableV;
+                self.state = ClusterMachineState::HangulSyllableV;
             }
             GraphemeProperty::LVT => {
-                self.state = HangulSyllableT;
+                self.state = ClusterMachineState::HangulSyllableT;
             }
-            // GraphemeProperty::ZWJ  => {
-            //     self.state = Start;
-            //     return Break::After
-            // },
             GraphemeProperty::EXTENDED_GRAPHEME => {
-                self.state = Emoji;
+                self.state = ClusterMachineState::Emoji;
             }
             GraphemeProperty::REGIONAL_INDICATOR => {
-                self.state = Flag;
+                self.state = ClusterMachineState::Flag;
             }
             _ => {
-                self.state = Other;
+                self.state = ClusterMachineState::Other;
             }
         }
         Break::None
@@ -331,23 +400,10 @@ fn is_continuation(property: u8) -> bool {
     property != 0 && property & 0xc == 0
 }
 
-#[inline]
-fn is_hangul(property: u8) -> bool {
-    property & 0x8 != 0
-}
 
+// Symbolic names for properties in data tables
 struct GraphemeProperty {}
-
-// must continue: 1 2 3
-//    EXTEND SPACING_MARK ZWJ
-// Hangul 8-12
-//    L 0xc V 0x8 T 0x9 LV 0xd LVT 0xe
-// CONTROL includes CR/LF 4
-// PREPEND 5
-// EXTENDED_GRAPHEME 6
-// OTHER 0
 impl GraphemeProperty {
-    const OTHER: u8 = 0x00;
     const EXTEND: u8 = 0x01;
     const SPACING_MARK: u8 = 0x02;
     const ZWJ: u8 = 0x03;
