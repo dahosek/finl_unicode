@@ -7,6 +7,7 @@ keywords = ["unicode", "segmentation", "graphemes"]
 categories = ["text-processing", "internationalization"]
 description = "Library for handling Unicode functionality for finl (categories and grapheme segmentation)"
 homepage = "https://finl.xyz"
+repository = "https://github.com/dahosek/finl_unicode"
 
 [dependencies]
 
