@@ -1,6 +1,6 @@
 [package]
 name = "finl_unicode"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 keywords = ["unicode", "segmentation", "graphemes"]
@@ -24,8 +24,6 @@ categories = []
 grapheme_clusters = []
 
 [build-dependencies]
-anyhow = "1.0.57"
-itertools = "0.10.3"
 
 [[bench]]
 name = "categories"

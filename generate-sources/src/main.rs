@@ -1,26 +1,46 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufRead, BufReader,Write};
 use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
+use reqwest::blocking::Client;
 use itertools::Itertools;
 
 fn main() -> anyhow::Result<()> {
     let unicode_version = "14.0.0";
-    let out_dir = env::var_os("OUT_DIR").unwrap();
-    let base_dir = env::var_os("CARGO_MANIFEST_DIR").unwrap();
-    let data_dir = Path::new(&base_dir).join("resources").join(unicode_version);
+    let mut out_dir = env::var_os("CARGO_MANIFEST_DIR").unwrap();
+    out_dir.push("/target/tmp/");
+    if !Path::new(&out_dir).try_exists()? {
+        std::fs::create_dir(&out_dir)?;
+    }
+    let mut code_dir = env::var_os("CARGO_MANIFEST_DIR").unwrap();
+    code_dir.push("/../src/data/");
+    if !Path::new(&code_dir).try_exists()? {
+        std::fs::create_dir(&code_dir)?;
+    }    let data_dir = Path::new(&out_dir).join("data").join(unicode_version);
     std::fs::create_dir_all(&data_dir)?;
     let unicode_data_txt = data_dir.join("UnicodeData.txt");
     let grapheme_break_test_txt = data_dir.join("GraphemeBreakTest.txt");
     let grapheme_break_property_txt = data_dir.join("GraphemeBreakProperty.txt");
     let emoji_data_txt = data_dir.join("emoji-data.txt");
 
-    build_character_tables(&out_dir, &unicode_data_txt)?;
-    build_grapheme_break_test(&out_dir, &grapheme_break_test_txt)?;
-    build_grapheme_break_property(&out_dir, &grapheme_break_property_txt, &emoji_data_txt)?;
+
+    eprintln!("Downloading Unicode data...");
+    download_unicode_data(&unicode_data_txt, "ucd/UnicodeData.txt", unicode_version)?;
+    eprintln!("Generating category data...");
+    build_character_tables(&code_dir, &unicode_data_txt)?;
+    eprintln!("Downloading grapheme test data...");
+    download_unicode_data(&grapheme_break_test_txt, "ucd/auxiliary/GraphemeBreakTest.txt", unicode_version)?;
+    eprintln!("Generating grapheme tests...");
+    build_grapheme_break_test(&code_dir, &grapheme_break_test_txt)?;
+    eprintln!("Downloading grapheme break properties...");
+    download_unicode_data(&grapheme_break_property_txt, "ucd/auxiliary/GraphemeBreakProperty.txt", unicode_version)?;
+    eprintln!("Downloading emoji data...");
+    download_unicode_data(&emoji_data_txt, "ucd/emoji/emoji-data.txt", unicode_version)?;
+    eprintln!("Generating grapheme break data...");
+    build_grapheme_break_property(&code_dir, &grapheme_break_property_txt, &emoji_data_txt)?;
     Ok(())
 }
 
@@ -31,7 +51,7 @@ fn main() -> anyhow::Result<()> {
 // - 2 Number
 // - 3 Punctuation
 // - 4 Symbol
-// - 5 Seperator
+// - 5 Separator
 // - 6 Control
 // - 7 Control
 // - 8 Letter
@@ -110,7 +130,7 @@ fn cat_to_u8(cat: &str) -> u8 {
 // how this would work. The coding of categories into bytes is my own.
 fn build_character_tables(out_dir: &OsStr, unicode_data_txt: &PathBuf) -> anyhow::Result<()> {
     let characters_rs = Path::new(out_dir).join("characters.rs");
-    let mut characters_rs = File::create(characters_rs)?;
+    let characters_rs = File::create(characters_rs)?;
     let unicode_data = File::open(unicode_data_txt)?;
     let unicode_data = BufReader::new(unicode_data);
 
@@ -143,40 +163,7 @@ fn build_character_tables(out_dir: &OsStr, unicode_data_txt: &PathBuf) -> anyhow
         }
     }
 
-    // Then we break it down into pages (wrapping the result with a bit of Rust boilerplate)
-    writeln!(characters_rs, "const CAT_TABLE: [u8;0x1100] = [")?;
-    let mut page_index = HashMap::new();
-    let mut page_number = 0u8;
-    for page in 0 .. 0x1100 {
-        let page_start = page << 8;
-        let page_data  = raw_categories[page_start..page_start+0x100].to_vec();
-        let &mut page_ref = page_index.entry(page_data).or_insert(page_number);
-        if page_ref == page_number {
-            page_number += 1
-        }
-        writeln!(characters_rs, "\t {page_ref}, // {page:#x}")?;
-        // let mut values_seen: HashSet<u8> = raw_categories[page_start..page_start+0x100].iter().map(|x| *x).collect();
-        // values_seen.remove(&0);
-        // if values_seen.len() <= 1 {
-        //     let single_code = values_seen.iter().next().cloned().unwrap_or(0);
-        //     // There was only one code present in the page
-        //     writeln!(characters_rs, "\tEither::Code({single_code:#x}), // {page:#x}")?;
-        // }
-        // else {
-        //     writeln!(characters_rs, "\tEither::Page({page_number}), // {page:#x} -- {}", values_seen.len())?;
-        //
-        //     cat_pages.push(raw_categories[page_start..page_start+0x100].to_vec());
-        //     page_number += 1;
-        // }
-    }
-    writeln!(characters_rs, "];")?;
-    let cat_pages = page_index.iter()
-        .map(|(k, v)| (v,k))
-        .sorted_by(|(a,_),(b,_)| Ord::cmp(a,b))
-        .map(|(_, page)| page )
-        .collect_vec();
-    writeln!(characters_rs, "const CAT_PAGES: [[u8;256];{}] = {cat_pages:#x?};", cat_pages.len())?;
-    Ok(())
+    write_data_tables(characters_rs, &raw_categories, "CAT_TABLE", "CAT_PAGES")
 }
 
 fn build_grapheme_break_test(out_dir: &OsString, grapheme_break_test_txt: &PathBuf) -> anyhow::Result<()>  {
@@ -185,11 +172,19 @@ fn build_grapheme_break_test(out_dir: &OsString, grapheme_break_test_txt: &PathB
     let grapheme_break_test = File::open(grapheme_break_test_txt)?;
     let grapheme_break_test = BufReader::new(grapheme_break_test);
     let mut grapheme_bench_txt = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    grapheme_bench_txt.push("..");
     grapheme_bench_txt.push("resources");
     grapheme_bench_txt.push("graphemes.txt");
     let mut grapheme_bench_txt = File::create(grapheme_bench_txt)?;
 
-    writeln!(grapheme_test_rs, "{{")?;
+    writeln!(grapheme_bench_txt, "Automatically generated data file DO NOT EDIT MANUALLY")?;
+
+    writeln!(grapheme_test_rs, "// GENERATED CODE DO NOT MANUALLY EDIT")?;
+    writeln!(grapheme_test_rs)?;
+    writeln!(grapheme_test_rs, "use crate::grapheme_clusters::tests::grapheme_test;")?;
+    writeln!(grapheme_test_rs)?;
+    writeln!(grapheme_test_rs, "#[test]")?;
+    writeln!(grapheme_test_rs, "fn standard_grapheme_test() {{")?;
     for line in grapheme_break_test.lines() {
         let line = line.unwrap();
         if let Some((map, comment)) = line.split_once('#') {
@@ -260,7 +255,7 @@ fn str_to_range(range: &str) -> RangeInclusive<usize> {
 
 fn build_grapheme_break_property(out_dir: &OsString, grapheme_break_property_txt: &PathBuf, emoji_data_txt: &PathBuf) -> anyhow::Result<()> {
     let grapheme_property_rs = Path::new(out_dir).join("grapheme_property.rs");
-    let mut grapheme_property_rs = File::create(grapheme_property_rs)?;
+    let grapheme_property_rs = File::create(grapheme_property_rs)?;
     let grapheme_break_property = File::open(grapheme_break_property_txt)?;
     let grapheme_break_property = BufReader::new(grapheme_break_property);
     let emoji_data = File::open(emoji_data_txt)?;
@@ -293,34 +288,64 @@ fn build_grapheme_break_property(out_dir: &OsString, grapheme_break_property_txt
         }
     }
 
+    write_data_tables(grapheme_property_rs, &raw_grapheme_properties, "GP_TABLE", "GP_PAGES")
     // Then we break it down into pages (wrapping the result with a bit of Rust boilerplate)
-    writeln!(grapheme_property_rs, "const GP_TABLE: [Either;0x1100] = [")?;
-    let mut cat_pages = vec!();
-    let mut page_number = 0;
+    // writeln!(grapheme_property_rs, "// GENERATED CODE DO NOT MANUALLY EDIT")?;
+    // writeln!(grapheme_property_rs, "pub const GP_TABLE: [u8;0x1100] = [")?;
+    // let mut page_index = HashMap::new();
+    // let mut page_number = 0;
+    // for page in 0 .. 0x1100 {
+    //     let page_start = page << 8;
+    //     let page_data  = raw_grapheme_properties[page_start..page_start+0x100].to_vec();
+    //     let &mut page_ref = page_index.entry(page_data).or_insert(page_number);
+    //     if page_ref == page_number {
+    //         page_number += 1
+    //     }
+    //     writeln!(grapheme_property_rs, "\t {page_ref}, // {page:#x}")?;
+    // }
+    // writeln!(grapheme_property_rs, "];")?;
+    //
+    // let cat_pages = page_index.iter()
+    //     .map(|(k, v)| (v,k))
+    //     .sorted_by(|(a,_),(b,_)| Ord::cmp(a,b))
+    //     .map(|(_, page)| page )
+    //     .collect_vec();
+    // writeln!(grapheme_property_rs, "pub const GP_PAGES: [[u8;256];{}] = {cat_pages:#x?};", cat_pages.len())?;
+    //
+    // Ok(())
+}
+
+fn write_data_tables(mut rust_file : File, raw_data: &[u8], table_name: &str, pages_name: &str) -> anyhow::Result<()> {
+    writeln!(rust_file, "// GENERATED CODE DO NOT MANUALLY EDIT")?;
+    writeln!(rust_file, "pub const {table_name}: [u8;0x1100] = [")?;
+    let mut page_index = HashMap::new();
+    let mut page_number = 0u8;
     for page in 0 .. 0x1100 {
         let page_start = page << 8;
-        let values_seen: HashSet<u8> = raw_grapheme_properties[page_start..page_start+0x100].iter().map(|x| *x).collect();
-        if values_seen.len() == 1 {
-            let single_code = values_seen.iter().next().cloned().unwrap_or(0);
-            // There was only one code present in the page
-            writeln!(grapheme_property_rs, "\tEither::Code({single_code:#x}), // {page:#x}")?;
+        let page_data  = raw_data[page_start..page_start+0x100].to_vec();
+        let &mut page_ref = page_index.entry(page_data).or_insert(page_number);
+        if page_ref == page_number {
+            page_number += 1
         }
-        else {
-            writeln!(grapheme_property_rs, "\tEither::Page({page_number}), // {page:#x} -- {}", values_seen.len())?;
-
-            cat_pages.push(raw_grapheme_properties[page_start..page_start+0x100].to_vec());
-            page_number += 1;
-        }
+        writeln!(rust_file, "\t {page_ref}, // {page:#x}")?;
     }
-    writeln!(grapheme_property_rs, "];")?;
-    writeln!(grapheme_property_rs, "const GP_PAGES: [[u8;256];{}] = [", cat_pages.len())?;
-    for (page, idx) in cat_pages.iter().zip(0..) {
-        writeln!(grapheme_property_rs, "/* {idx} */\t{page:?},")?;
-    }
-    //{cat_pages:x?};
-    writeln!(grapheme_property_rs, "];")?;
-
+    writeln!(rust_file, "];")?;
+    let pages = page_index.iter()
+        .map(|(k, v)| (v,k))
+        .sorted_by(|(a,_),(b,_)| Ord::cmp(a,b))
+        .map(|(_, page)| page )
+        .collect_vec();
+    writeln!(rust_file, "pub const {pages_name}: [[u8;256];{}] = {pages:#x?};", pages.len())?;
     Ok(())
 }
 
-
+fn download_unicode_data(local_txt_data_file: &PathBuf, remote_txt_data_file: &str, unicode_version: &str) -> anyhow::Result<()> {
+    let url_base = "https://www.unicode.org/Public/".to_owned() + unicode_version + "/";
+    let client = Client::new();
+    if !local_txt_data_file.exists() {
+        let mut remote_data = client.get(url_base.clone() + remote_txt_data_file).send()?;
+        let mut file = File::create(local_txt_data_file)?;
+        std::io::copy(&mut remote_data, &mut file)?;
+    }
+    Ok(())
+}

@@ -20,3 +20,4 @@ pub mod categories;
 #[cfg(feature = "grapheme_clusters")]
 pub mod grapheme_clusters;
 
+mod data;

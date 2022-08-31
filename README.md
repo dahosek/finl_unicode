@@ -62,6 +62,11 @@ You may want to avoid this if you need `no_std` (maybe I’ll cover that in a fu
 If you need other clustering algorithms, I have no near future plans to implement them (but I would do it for money). 
 I also do not support legacy clustering algorithms which are supported by `unicode-segmentation`.
 
+## Unicode copyright notice
+
+This package incorporates data from Unicode Inc.
+Copyright © 1991–2022 Unicode, Inc. All rights reserved.
+
 ## Filthy lucre
 
 I’ve released this under an MIT/Apache license. Do what you like with it. 
