@@ -15,6 +15,8 @@
 /// sub-class.
 ///
 
+use crate::data::characters::{CAT_PAGES, CAT_TABLE};
+
 pub trait CharacterCategories {
     /// Determines whether a character is class L, letter (Lu, Ll, Lt, Lm, Lo). This includes all
     /// characters used for word formation, both phonetic and ideograms. It does not include symbols
@@ -304,7 +306,6 @@ impl Cat {
 fn get_code(c: char) -> u8 {
     CAT_PAGES[usize::from(CAT_TABLE[(c as usize) >> 8])][(c as usize) & 0xff]
 }
-include!(concat!(env!("OUT_DIR"), "/characters.rs"));
 
 impl CharacterCategories for char {
     #[inline]

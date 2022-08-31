@@ -26,6 +26,7 @@
 use std::iter::Peekable;
 use std::str::CharIndices;
 use std::str::Chars;
+use crate::data::grapheme_property::{GP_PAGES,GP_TABLE};
 
 
 /// `Graphemes` provides an iterator over the grapheme clusters of a string.
@@ -418,34 +419,16 @@ impl GraphemeProperty {
     const LVT: u8 = 0x0e;
 }
 
-enum Either {
-    Code(u8),
-    Page(u16),
-}
-
-impl Either {
-    #[inline]
-    pub fn get_code(&self, index: u8) -> u8 {
-        match self {
-            &Either::Code(code) => code,
-            &Either::Page(page) => GP_PAGES[usize::from(page)][usize::from(index)]
-        }
-    }
-}
 
 #[inline]
 fn get_property(c: char) -> u8 {
-    GP_TABLE[c as usize >> 8]
-        .get_code(c as u8)
+    GP_PAGES[usize::from(GP_TABLE[(c as usize) >> 8])][(c as usize) & 0xff]
 }
-
-
-include!(concat!(env!("OUT_DIR"), "/grapheme_property.rs"));
 
 
 
 #[cfg(test)]
-mod tests {
+pub (crate) mod tests {
     use crate::grapheme_clusters::*;
 
     #[test]
@@ -465,7 +448,7 @@ mod tests {
         assert_eq!(Some("f".to_string()), peekable_index.next_cluster());
     }
 
-    fn grapheme_test(input: &str, expected_output: &[&str], message: &str) {
+    pub (crate) fn grapheme_test(input: &str, expected_output: &[&str], message: &str) {
         let mut iter = input.char_indices().peekable();
         let mut clusters = vec!();
         while let Some(cluster) = iter.next_cluster() {
@@ -482,8 +465,4 @@ mod tests {
             .for_each(|(actual, &expected)| assert_eq!(*actual, expected, "Grapheme cluster indices mismatch: {message}\n{} ≠ {}", actual.escape_unicode(), expected.escape_unicode()));
     }
 
-    #[test]
-    fn big_master_test() {
-        include!(concat!(env!("OUT_DIR"), "/grapheme_test.rs"));
-    }
 }
