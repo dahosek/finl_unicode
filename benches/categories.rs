@@ -1,5 +1,6 @@
 use std::path::PathBuf;
-use criterion::{criterion_group, criterion_main, Criterion};
+
+use criterion::{Criterion, criterion_group, criterion_main};
 
 mod finl_test {
     use finl_unicode::categories::CharacterCategories;
@@ -17,6 +18,7 @@ mod finl_test {
 
 mod uc_test {
     use unicode_categories::UnicodeCategories;
+
     #[inline]
     pub fn letter_test(c: &char) -> bool {
         c.is_letter()
@@ -26,88 +28,51 @@ mod uc_test {
     pub fn lc_test(c: &char) -> bool {
         c.is_letter_lowercase()
     }
+}
 
+pub fn text_benchmark(c: &mut Criterion, source_file_name: &str, group_name: &str, do_lowercase: bool) {
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("resources");
+    path.push("benchmark-texts");
+    path.push(source_file_name);
+
+    let input_text = std::fs::read_to_string(path).unwrap();
+    let mut group = c.benchmark_group(group_name);
+    group.bench_function("finl_unicode",
+                         |b| b.iter(|| {
+                             input_text.chars().filter(|c| finl_test::letter_test(c)).count();
+                         }),
+    );
+    group.bench_function("unicode_categories",
+                         |b| b.iter(|| {
+                             input_text.chars().filter(|c| uc_test::letter_test(c)).count();
+                         }),
+    );
+    group.finish();
+
+    if do_lowercase {
+        let mut group_name = group_name.to_string();
+        group_name.push_str(" for lowercase");
+        let mut group = c.benchmark_group(group_name);
+        group.bench_function("finl_unicode",
+                             |b| b.iter(|| {
+                                 input_text.chars().filter(|c| finl_test::lc_test(c)).count();
+                             }),
+        );
+        group.bench_function("unicode_categories",
+                             |b| b.iter(|| {
+                                 input_text.chars().filter(|c| uc_test::lc_test(c)).count();
+                             }),
+        );
+        group.finish();
+    }
 }
 
 pub fn criterion_benchmark(c: &mut Criterion) {
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("resources");
-    let mut japanese_txt = path.clone();
-    japanese_txt.push("35018-0.txt");
-    let mut czech_txt = path.clone();
-    czech_txt.push("59765-0.txt");
-    let mut english_txt = path.clone();
-    english_txt.push("84-0.txt");
-
-    let japanese = std::fs::read_to_string(japanese_txt).unwrap();
-    let czech = std::fs::read_to_string(czech_txt).unwrap();
-    let english = std::fs::read_to_string(english_txt).unwrap();
-
-    let mut group = c.benchmark_group("Process Japanese text file");
-    group.bench_function("finl_unicode",
-        |b| b.iter(|| {
-            japanese.chars().filter(|c| finl_test::letter_test(c)).count();
-        })
-    );
-    group.bench_function("unicode_categories",
-                         |b| b.iter(|| {
-                             japanese.chars().filter(|c| uc_test::letter_test(c)).count();
-                         })
-    );
-    group.finish();
-
-    let mut group = c.benchmark_group("Process Czech text file");
-    group.bench_function("finl_unicode",
-                         |b| b.iter(|| {
-                             czech.chars().filter(|c| finl_test::letter_test(c)).count();
-                         })
-    );
-    group.bench_function("unicode_categories",
-                         |b| b.iter(|| {
-                             czech.chars().filter(|c| uc_test::letter_test(c)).count();
-                         })
-    );
-    group.finish();
-
-    let mut group = c.benchmark_group("Process Czech text file for lowercase");
-    group.bench_function("finl_unicode",
-                         |b| b.iter(|| {
-                             czech.chars().filter(|c| finl_test::lc_test(c)).count();
-                         })
-    );
-    group.bench_function("unicode_categories",
-                         |b| b.iter(|| {
-                             czech.chars().filter(|c| uc_test::lc_test(c)).count();
-                         })
-    );
-    group.finish();
-
-    let mut group = c.benchmark_group("Process English text file");
-    group.bench_function("finl_unicode",
-                         |b| b.iter(|| {
-                             english.chars().filter(|c| finl_test::letter_test(c)).count();
-                         })
-    );
-    group.bench_function("unicode_categories",
-                         |b| b.iter(|| {
-                             english.chars().filter(|c| uc_test::letter_test(c)).count();
-                         })
-    );
-    group.finish();
-
-    let mut group = c.benchmark_group("Process English text file for lowercase");
-    group.bench_function("finl_unicode",
-                         |b| b.iter(|| {
-                             english.chars().filter(|c| finl_test::lc_test(c)).count();
-                         })
-    );
-    group.bench_function("unicode_categories",
-                         |b| b.iter(|| {
-                             english.chars().filter(|c| uc_test::lc_test(c)).count();
-                         })
-    );
-    group.finish();
-
+    text_benchmark(c, "35018-0.txt", "Process Japanese text file", false);
+    text_benchmark(c, "59765-0.txt", "Proces Czech text file", true);
+    text_benchmark(c, "84-0.txt", "Process English text file", true);
+    text_benchmark(c, "source_code.txt", "Process source code", true);
 }
 
 criterion_group!(benches, criterion_benchmark);

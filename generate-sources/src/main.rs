@@ -9,7 +9,7 @@ use reqwest::blocking::Client;
 use itertools::Itertools;
 
 fn main() -> anyhow::Result<()> {
-    let unicode_version = "14.0.0";
+    let unicode_version = "15.0.0";
     let mut out_dir = env::var_os("CARGO_MANIFEST_DIR").unwrap();
     out_dir.push("/target/tmp/");
     if !Path::new(&out_dir).try_exists()? {
@@ -19,7 +19,8 @@ fn main() -> anyhow::Result<()> {
     code_dir.push("/../src/data/");
     if !Path::new(&code_dir).try_exists()? {
         std::fs::create_dir(&code_dir)?;
-    }    let data_dir = Path::new(&out_dir).join("data").join(unicode_version);
+    }
+    let data_dir = Path::new(&out_dir).join("data").join(unicode_version);
     std::fs::create_dir_all(&data_dir)?;
     let unicode_data_txt = data_dir.join("UnicodeData.txt");
     let grapheme_break_test_txt = data_dir.join("GraphemeBreakTest.txt");

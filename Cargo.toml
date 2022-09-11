@@ -16,7 +16,7 @@ criterion = { version = "0.3.5", features=["html_reports"]}
 unicode_categories = "0.1.1"
 finl_unicode = {path=".", features=["grapheme_clusters", "categories"]}
 unicode-segmentation = "1.9.0"
-bstr = "0.2.17"
+bstr = "1.0.0"
 
 [features]
 default = ["categories", "grapheme_clusters"]
