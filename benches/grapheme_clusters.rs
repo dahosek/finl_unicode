@@ -49,32 +49,42 @@ mod bstr {
     }
 }
 
-pub fn criterion_benchmark(c: &mut Criterion) {
+fn text_benchmark(c: &mut Criterion, source_file_name: &str, group_name: &str) {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("resources");
-    let mut graphemes_txt = path.clone();
-    graphemes_txt.push("graphemes.txt");
-
-    let graphemes = std::fs::read_to_string(graphemes_txt).unwrap();
-
-    let mut group = c.benchmark_group("Process graphemes");
+    path.push("benchmark-texts");
+    path.push(source_file_name);
+    let input_text = std::fs::read_to_string(path).unwrap();
+    let mut group = c.benchmark_group(group_name);
     group.bench_function("finl_unicode",
                          |b| b.iter(|| {
-                             finl_test::read_clusters(&graphemes);
+                             finl_test::read_clusters(&input_text);
                          })
     );
 
     group.bench_function("unicode-rs",
                          |b| b.iter(|| {
-                             unicode_rs::read_clusters(&graphemes);
+                             unicode_rs::read_clusters(&input_text);
                          })
     );
 
     group.bench_function("bstr",
                          |b| b.iter(|| {
-                             bstr::read_clusters(&graphemes);
+                             bstr::read_clusters(&input_text);
                          })
     );
+}
+
+pub fn criterion_benchmark(c: &mut Criterion) {
+    text_benchmark(c, "graphemes.txt", "Unicode grapheme test text");
+    text_benchmark(c, "arabic.txt", "Arabic text");
+    text_benchmark(c, "english.txt", "English text");
+    text_benchmark(c, "hindi.txt", "Hindi text");
+    text_benchmark(c, "japanese.txt", "Japanese text");
+    text_benchmark(c, "korean.txt", "Korean text");
+    text_benchmark(c, "mandarin.txt", "Mandarin text");
+    text_benchmark(c, "russian.txt", "Russian text");
+    text_benchmark(c, "source_code.txt", "Source code text");
 }
 
 criterion_group!(benches, criterion_benchmark);
