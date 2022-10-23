@@ -103,6 +103,7 @@ I guarantee no warranty or support, although if you care to throw some money my 
 - **1.0.1** Build-process changes to make docs.rs documentation build
 - **1.0.2** More changes because the first round apparently weren’t enough
 - **1.1.0** Add support for Unicode 15.0.0, added new benchmark comparisons.
+- **1.2.0** Allow grapheme clustering to work on any `Peekable` iterator over `char` or `(usize,char)`.
 
 ---
 

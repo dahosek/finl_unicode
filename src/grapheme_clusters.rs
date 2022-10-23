@@ -88,7 +88,9 @@ impl<'a> Iterator for Graphemes<'a> {
 }
 
 /// Get the next grapheme cluster from a stream of characters or char indices
-/// This trait is implemented for `Peekable<CharIndices>` and `Peekable<Chars>`.
+/// This trait is implemented for any `Peekable` iterator over either `char` or `(usize, char)` (so
+/// it will work on `Peekable<Chars>` and `Peekable<CharIndices>` as well as any other peekable iterator
+/// which meets this requirement.
 pub trait GraphemeCluster<T> {
     fn next_cluster(&mut self) -> Option<String>;
 }
@@ -103,7 +105,7 @@ impl<T> GraphemeCluster<T> for T where T: PeekChar {
             let mut cluster_machine = ClusterMachine::new();
             let mut rv = String::new();
             loop {
-                if let Some(&ch) = self.peek_char() {
+                if let Some(ch) = self.peek_char() {
                     let state = cluster_machine.find_cluster(ch);
                     match state {
                         Break::None => {
@@ -134,29 +136,33 @@ impl<T> GraphemeCluster<T> for T where T: PeekChar {
 /// long as you can implement the two methods below.
 pub trait PeekChar: Iterator {
     /// Returns the next character (if it exists) or `None` otherwise.
-    fn peek_char(&mut self) -> Option<&char>;
+    fn peek_char(&mut self) -> Option<char>;
     /// Returns `true` if there is another character available on the iterator, `false` otherwise.
     fn has_next(&mut self) -> bool;
 }
 
-
-impl PeekChar for Peekable<Chars<'_>> {
-    #[inline]
-    fn peek_char(&mut self) -> Option<&char> {
-        self.peek()
-    }
-
-    #[inline]
-    fn has_next(&mut self) -> bool {
-        self.peek().is_some()
-    }
-
+trait HasChar {
+    fn get_char(& self) -> char;
 }
 
-impl PeekChar for Peekable<CharIndices<'_>> {
+impl HasChar for char {
+    fn get_char(& self) -> char {
+        *self
+    }
+}
+
+impl HasChar for (usize, char) {
+    fn get_char(&self) -> char {
+        self.1
+    }
+}
+
+impl<CharIter, C: HasChar> PeekChar for Peekable<CharIter>
+where CharIter: Iterator<Item = C>
+{
     #[inline]
-    fn peek_char(&mut self) -> Option<&char> {
-        self.peek().map(|(_, ch)|  ch)
+    fn peek_char(&mut self) -> Option<char> {
+        self.peek().map(|c| c.get_char())
     }
 
     #[inline]
