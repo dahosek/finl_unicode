@@ -88,7 +88,9 @@ impl<'a> Iterator for Graphemes<'a> {
 }
 
 /// Get the next grapheme cluster from a stream of characters or char indices
-/// This trait is implemented for `Peekable<CharIndices>` and `Peekable<Chars>`.
+/// This trait is implemented for any `Peekable` iterator over either `char` or `(usize, char)` (so
+/// it will work on `Peekable<Chars>` and `Peekable<CharIndices>` as well as any other peekable iterator
+/// which meets this requirement.
 pub trait GraphemeCluster<T> {
     fn next_cluster(&mut self) -> Option<String>;
 }
