@@ -25,7 +25,6 @@
 
 use std::iter::Peekable;
 use std::str::CharIndices;
-use std::str::Chars;
 use crate::data::grapheme_property::{GP_PAGES,GP_TABLE};
 
 
@@ -187,6 +186,8 @@ enum ClusterMachineState {
     Flag,
     Emoji,
     EmojiZWJ,
+    IndicClusterStart,
+    IndicClusterExtend,
     Other,
 }
 
@@ -238,7 +239,6 @@ impl ClusterMachine {
                 self.first_character(c);
                 Break::None
             }
-
             ClusterMachineState::HangulSyllableL => {
                 match property {
                     GraphemeProperty::L => Break::None,
@@ -250,7 +250,7 @@ impl ClusterMachine {
                         self.state = ClusterMachineState::HangulSyllableT;
                         Break::None
                     }
-                    GraphemeProperty::EXTEND | GraphemeProperty::SPACING_MARK | GraphemeProperty::ZWJ => {
+                    GraphemeProperty::EXTEND | GraphemeProperty::SPACING_MARK | GraphemeProperty::IN_LINKER | GraphemeProperty::ZWJ => {
                         self.state = ClusterMachineState::CcsBase;
                         Break::None
                     }
@@ -267,7 +267,7 @@ impl ClusterMachine {
                         self.state = ClusterMachineState::HangulSyllableT;
                         Break::None
                     }
-                    GraphemeProperty::EXTEND | GraphemeProperty::SPACING_MARK | GraphemeProperty::ZWJ => {
+                    GraphemeProperty::EXTEND | GraphemeProperty::SPACING_MARK | GraphemeProperty::IN_LINKER | GraphemeProperty::ZWJ => {
                         self.state = ClusterMachineState::CcsBase;
                         Break::None
                     }
@@ -280,7 +280,7 @@ impl ClusterMachine {
             ClusterMachineState::HangulSyllableT => {
                 match property {
                     GraphemeProperty::T => Break::None,
-                    GraphemeProperty::EXTEND | GraphemeProperty::SPACING_MARK | GraphemeProperty::ZWJ => {
+                    GraphemeProperty::EXTEND | GraphemeProperty::SPACING_MARK | GraphemeProperty::IN_LINKER | GraphemeProperty::ZWJ => {
                         self.state = ClusterMachineState::CcsBase;
                         Break::None
                     }
@@ -294,6 +294,7 @@ impl ClusterMachine {
                 match property {
                     GraphemeProperty::EXTEND
                     | GraphemeProperty::SPACING_MARK
+                    | GraphemeProperty::IN_LINKER
                     | GraphemeProperty::ZWJ => Break::None,
                     _ => Break::Before
                 }
@@ -307,6 +308,7 @@ impl ClusterMachine {
                     }
                     GraphemeProperty::EXTEND
                     | GraphemeProperty::SPACING_MARK
+                    | GraphemeProperty::IN_LINKER
                     | GraphemeProperty::ZWJ => {
                         self.state = ClusterMachineState::CcsExtend;
                         Break::None
@@ -323,7 +325,7 @@ impl ClusterMachine {
                         self.state = ClusterMachineState::EmojiZWJ;
                         Break::None
                     }
-                    GraphemeProperty::EXTEND | GraphemeProperty::SPACING_MARK => {
+                    GraphemeProperty::EXTEND | GraphemeProperty::SPACING_MARK | GraphemeProperty::IN_LINKER => {
                         self.state = ClusterMachineState::Emoji;
                         Break::None
                     }
@@ -342,6 +344,36 @@ impl ClusterMachine {
                 }
             }
             ClusterMachineState::CrLf => Break::Before,
+            ClusterMachineState::IndicClusterStart => {
+                match property {
+                    GraphemeProperty::IN_LINKER  => {
+                        self.state = ClusterMachineState::IndicClusterExtend;
+                        Break::None
+                    }
+                    GraphemeProperty::EXTEND |  GraphemeProperty::ZWJ |  GraphemeProperty::SPACING_MARK=> {
+                        Break::None
+                    }
+                    _ => {
+                        self.first_character(c);
+                        Break::Before
+                    }
+                }
+            }
+            ClusterMachineState::IndicClusterExtend => {
+                match property {
+                    GraphemeProperty::IN_LINKER | GraphemeProperty::EXTEND | GraphemeProperty::ZWJ => {
+                        Break::None
+                    }
+                    GraphemeProperty::IN_CONSONANT => {
+                        self.state = ClusterMachineState::IndicClusterStart;
+                        Break::None
+                    }
+                    _ => {
+                        self.first_character(c);
+                        Break::Before
+                    }
+                }
+            }
             _ => {
                 if is_continuation(property) {
                     Break::None
@@ -367,7 +399,7 @@ impl ClusterMachine {
             GraphemeProperty::PREPEND => {
                 self.state = ClusterMachineState::Precore;
             }
-            GraphemeProperty::EXTEND => {
+            GraphemeProperty::EXTEND | GraphemeProperty::IN_LINKER => {
                 self.state = ClusterMachineState::CcsExtend;
             }
             GraphemeProperty::SPACING_MARK => {
@@ -394,6 +426,9 @@ impl ClusterMachine {
             GraphemeProperty::REGIONAL_INDICATOR => {
                 self.state = ClusterMachineState::Flag;
             }
+            GraphemeProperty::IN_CONSONANT => {
+                self.state = ClusterMachineState::IndicClusterStart;
+            }
             _ => {
                 self.state = ClusterMachineState::Other;
             }
@@ -404,7 +439,7 @@ impl ClusterMachine {
 
 #[inline]
 fn is_continuation(property: u8) -> bool {
-    property != 0 && property & 0xc == 0
+    property != 0 && property & 0x2c == 0
 }
 
 
@@ -423,6 +458,8 @@ impl GraphemeProperty {
     const T: u8 = 0x09;
     const LV: u8 = 0x0d;
     const LVT: u8 = 0x0e;
+    const IN_CONSONANT: u8 = 0x20;
+    const IN_LINKER: u8 = 0x11;
 }
 
 
@@ -460,7 +497,8 @@ pub (crate) mod tests {
         while let Some(cluster) = iter.next_cluster() {
             clusters.push(cluster);
         }
-        assert_eq!(clusters.len(), expected_output.len(), "Lengths did not match on Grapheme Cluster\n\t{message}\n\tOutput: {clusters:?}\n\tExpected: {expected_output:?}");
+        let codes :Vec<u8> = input.chars().map(get_property).collect();
+        assert_eq!(clusters.len(), expected_output.len(), "Lengths did not match on Grapheme Cluster\n\t{message}\n\tOutput: {clusters:?}\n\tExpected: {expected_output:?}\n\tCodes: {codes:x?}");
         clusters.iter().zip(expected_output.into_iter())
             .for_each(|(actual, &expected)| assert_eq!(actual.as_str(), expected, "GraphemeCluster mismatch: {message}"));
 

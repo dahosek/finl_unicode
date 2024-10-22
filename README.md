@@ -26,24 +26,24 @@ I did benchmarks comparing my code against existing crates and discovered that I
 All benchmarks are generated using Criterion You can replicate them by running `cargo bench` from the project directory. Three numbers are given for all results: low/mean/high, all from the output of Criterion. The mean value is given in **bold**. 
 
 #### Unicode categories
-I ran three benchmarks to compare the performance of the crates. 
+I ran three benchmarks to compare the performance of the crates on my M3 Max MacBook Pro. 
 The Japanese text benchmark reads the Project Gutenberg EBook of *Kumogata monsho* by John Falkner and counts the characters in it which are Unicode letters.
 The Czech text benchmark reads the Project Gutenberg EBook of *Cítanka pro skoly obecné* by Jan Stastný and Jan Lepar and Josef Sokol (this was to exercise testing against a Latin-alphabet text with lots of diacriticals). 
-All letters and lowercase letters are counted.
+All letters are counted in the first benchmark and lowercase letters only are counted in the second.
 The English text benchmark reads the Project Gutenberg eBook of *Frankenstein* by Mary Wollstonecraft Shelley (to run against a text which is pure ASCII).
-All letters and lowercase letters are counted. The source code check is from neovim. Again, letters and lowercase letters are counted in the sample.
+All letters and lowercase letters are counted in two benchmarks as with the Czech text. The source code check is from neovim. Again, letters and lowercase letters are counted in the sample.
 
 I compared against [unicode_categories](https://docs.rs/unicode_categories/latest/unicode_categories/) 0.1.1. All times are in ms. Smaller is better.
 
 | Benchmark                | `finl_unicode`              | `unicode_categories`     |
 |--------------------------|-----------------------------|--------------------------|
-| Japanese text            | 0.62484/**0.64200**/0.66311 | 15.382/**15.719**/16.092 |
-| Czech text               | 0.18248/**0.19137**/0.19975 | 3.2322/**3.3329**/3.4435 |
-| Czech text (lowercase)   | 0.20361/**0.20529**/0.20724 | 1.8496/**1.8742**/1.9026 |
-| English text             | 0.52260/**0.54461**/0.56682 | 13.038/**13.330**/13.655 |
-| English text (lowercase) | 0.72885/**0.74219**/0.75668 | 8.3998/**8.5037**/8.6233 |
-| Source code              | 0.05544/**0.05785**/0.06046 | 1.6512/**1.7063**/1.7656 |
-| Source code (lowercase)  | 0.07506/**0.07673**/0.07895 | 0.7285/**0.7536**/0.7821 | 
+| Japanese text            | 0.26318/**0.26356**/0.26397 | 11.055/**11.071**/11.088 |
+| Czech text               | 0.07618/**0.07631**/0.07645 | 2.6268/**2.6293**/2.6316 |
+| Czech text (lowercase)   | 0.07601/**0.07614**/0.07626 | 1.4984/**1.4999**/1.5014 |
+| English text             | 0.24668/**0.24693**/0.24723 | 11.173/**11.185**/11.195 |
+| English text (lowercase) | 0.24682/**0.24707**/0.24735 | 7.8968/**7.9050**/7.9127 |
+| Source code              | 0.02738/**0.02745**/0.02753 | 1.5738/**1.5760**/1.5787 |
+| Source code (lowercase)  | 0.02733/**0.02735**/0.02738 | 0.7285/**0.7536**/0.7821 | 
 
 As you can see, this is a clear win (the difference is the choice of algorithm. `finl_unicode` uses two-step table lookup to be able to store categories compactly while `unicode_categories` uses a combination of range checks and binary searches on tables).
 
@@ -55,24 +55,20 @@ texts that were part of the `unicode_segmentation` benchmark suite.
 
 All times are in µs, smaller is better.
 
-| Benchmark        | `finl_unicde`            | `unicode_segmentation`   | `bstr`                   |
-|------------------|--------------------------|--------------------------|--------------------------|
-| Unicode graphemes | 130.34/**133.31**/137.00 | 209.51/**217.50**/225.53 | 337.68/**354.59**/372.75 |
-| Arabic text      | 262.05/**268.78**/273.65 | 443.11/**463.19**/482.25 | 842.78/**872.47**/906.84 |
-| English text     | 387.88/**395.08**/404.00 | 527.29/**552.92**/586.04 | 424.73/**437.04**/449.23 |
-| Hindi text       | 204.88/**216.04**/228.14 | 489.75/**500.55**/512.20 | 638.01/**641.28**/644.87 |
-| Japanese text    | 181.65/**190.87**/202.92 | 437.98/**451.51**/467.17 | 855.04/**880.48**/904.88 |
-| Korean text      | 298.19/**304.42**/312.47 | 813.45/**844.54**/880.53 | 1259.2/**1304.7**/1350.6 |
-| Mandarin text    | 154.55/**159.33**/164.22 | 284.59/**293.63**/306.59 | 679.67/**704.13**/730.46 |
-| Russian text     | 300.56/**312.86**/327.44 | 372.59/**392.12**/419.40 | 783.41/**838.96**/896.44 |
-| Source code      | 424.39/**443.88**/463.77 | 501.16/**506.81**/513.27 | 513.79/**531.82**/551.31 |
+| Benchmark         | `finl_unicde`            | `unicode_segmentation`   | `bstr`                   |
+|-------------------|--------------------------|--------------------------|--------------------------|
+| Unicode graphemes | 63.692/**63.813**/63.948 | 323.64/**324.08**/324.47 | 273.24/**273.87**/274.63 |
+| Arabic text       | 123.67/**124.02**/124.41 | 544.88/**545.97**/547.05 | 1055.7/**1057.8**/1059.8 |
+| English text      | 164.48/**164.56**/164.65 | 1057.6/**1061.1**/1064.7 | 349.35/**349.79**/350.26 |
+| Hindi text        | 94.467/**94.665**/94.865 | 604.75/**605.38**/606.01 | 838.03/**840.19**/842.23 |
+| Japanese text     | 70.491/**70.573**/70.685 | 451.89/**452.88**/453.88 | 997.97/**1000.5**/1003.4 |
+| Korean text       | 161.34/**161.79**/162.24 | 600.55/**602.49**/604.49 | 1291.9/**1293.5**/1295.1 |
+| Mandarin text     | 67.667/**67.792**/67.941 | 387.86/**388.61**/389.37 | 919.42/**920.86**/922.38 |
+| Russian text      | 127.03/**127.30**/127.60 | 609.74/**610.91**/612.12 | 873.43/**877.29**/881.24 |
+| Source code       | 176.73/**178.05**/180.91 | 1067.4/**1070.8**/1074.4 | 494.43/**495.96**/497.62 |
 
-Adding some additional tests reveals some interesting contrasts in performance. On text with minimal
-clustering (English and source code), my code is faster than `unicode_segmentation` and `bstr` (but not dramatically so) and it's
-interesting to see that `bstr` is slightly faster than `unicode_segmentation` on the English text benchmark,
-but where grapheme clusters become more common (Arabic and Hindi), the performance is dramatically better 
-with my crate. I wouldn’t expect clusters in the Japanese, but it and Korean show the most dramatic
-differences in performance.
+With the move from benchmarking on Intel to Apple Silicon, the performance difference for my code versus the other
+libraries was generally expanded. I’m curious as to explanations for why this might happen.
 
 ## Why not?
 
@@ -104,6 +100,7 @@ I guarantee no warranty or support, although if you care to throw some money my 
 - **1.0.2** More changes because the first round apparently weren’t enough
 - **1.1.0** Add support for Unicode 15.0.0, added new benchmark comparisons.
 - **1.2.0** Allow grapheme clustering to work on any `Peekable` iterator over `char` or `(usize,char)`.
+- **1.3.0** Add support for Unicode 16.0.0 (significant changes required for Indic Conjunct clusters), update license documentation and benchmark comparisons.
 
 ---
 

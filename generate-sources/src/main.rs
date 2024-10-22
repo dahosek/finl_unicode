@@ -9,7 +9,7 @@ use reqwest::blocking::Client;
 use itertools::Itertools;
 
 fn main() -> anyhow::Result<()> {
-    let unicode_version = "15.0.0";
+    let unicode_version = "16.0.0";
     let mut out_dir = env::var_os("CARGO_MANIFEST_DIR").unwrap();
     out_dir.push("/target/tmp/");
     if !Path::new(&out_dir).try_exists()? {
@@ -25,6 +25,7 @@ fn main() -> anyhow::Result<()> {
     let unicode_data_txt = data_dir.join("UnicodeData.txt");
     let grapheme_break_test_txt = data_dir.join("GraphemeBreakTest.txt");
     let grapheme_break_property_txt = data_dir.join("GraphemeBreakProperty.txt");
+    let derived_core_properties_txt = data_dir.join("DerivedCoreProperties.txt");
     let emoji_data_txt = data_dir.join("emoji-data.txt");
 
 
@@ -40,8 +41,10 @@ fn main() -> anyhow::Result<()> {
     download_unicode_data(&grapheme_break_property_txt, "ucd/auxiliary/GraphemeBreakProperty.txt", unicode_version)?;
     eprintln!("Downloading emoji data...");
     download_unicode_data(&emoji_data_txt, "ucd/emoji/emoji-data.txt", unicode_version)?;
+    eprintln!("Downloading derived core properties...");
+    download_unicode_data(&derived_core_properties_txt, "ucd/DerivedCoreProperties.txt", unicode_version)?;
     eprintln!("Generating grapheme break data...");
-    build_grapheme_break_property(&code_dir, &grapheme_break_property_txt, &emoji_data_txt)?;
+    build_grapheme_break_property(&code_dir, &grapheme_break_property_txt, &emoji_data_txt, &derived_core_properties_txt)?;
     Ok(())
 }
 
@@ -254,13 +257,15 @@ fn str_to_range(range: &str) -> RangeInclusive<usize> {
     }
 }
 
-fn build_grapheme_break_property(out_dir: &OsString, grapheme_break_property_txt: &PathBuf, emoji_data_txt: &PathBuf) -> anyhow::Result<()> {
+fn build_grapheme_break_property(out_dir: &OsString, grapheme_break_property_txt: &PathBuf, emoji_data_txt: &PathBuf, derived_core_properties_txt: &PathBuf) -> anyhow::Result<()> {
     let grapheme_property_rs = Path::new(out_dir).join("grapheme_property.rs");
     let grapheme_property_rs = File::create(grapheme_property_rs)?;
     let grapheme_break_property = File::open(grapheme_break_property_txt)?;
     let grapheme_break_property = BufReader::new(grapheme_break_property);
     let emoji_data = File::open(emoji_data_txt)?;
     let emoji_data = BufReader::new(emoji_data);
+    let derived_core_properties = File::open(derived_core_properties_txt)?;
+    let derived_core_properties = BufReader::new(derived_core_properties);
 
     // first pass: build an array of all the properties
     let mut raw_grapheme_properties = [0u8;0x110000];
@@ -289,31 +294,26 @@ fn build_grapheme_break_property(out_dir: &OsString, grapheme_break_property_txt
         }
     }
 
+    // update conjunct cluster characteristics
+    // We set the high nibble to 2x for consonants and 1x for linkers
+    for line in derived_core_properties.lines() {
+        let line = line.unwrap();
+        if let Some((line, _)) = line.split_once('#') {
+            if let Some((range, property)) = line.split_once(';') {
+                let range = range.trim();
+                let property = property.trim();
+                if property == "InCB; Linker" {
+                    raw_grapheme_properties.get_mut(str_to_range(range)).unwrap().iter_mut().for_each(|x|  *x |= 0x10);
+
+                }
+                if property == "InCB; Consonant" {
+                    raw_grapheme_properties.get_mut(str_to_range(range)).unwrap().iter_mut().for_each(|x| *x |= 0x20);
+                }
+            }
+        }
+    }
+
     write_data_tables(grapheme_property_rs, &raw_grapheme_properties, "GP_TABLE", "GP_PAGES")
-    // Then we break it down into pages (wrapping the result with a bit of Rust boilerplate)
-    // writeln!(grapheme_property_rs, "// GENERATED CODE DO NOT MANUALLY EDIT")?;
-    // writeln!(grapheme_property_rs, "pub const GP_TABLE: [u8;0x1100] = [")?;
-    // let mut page_index = HashMap::new();
-    // let mut page_number = 0;
-    // for page in 0 .. 0x1100 {
-    //     let page_start = page << 8;
-    //     let page_data  = raw_grapheme_properties[page_start..page_start+0x100].to_vec();
-    //     let &mut page_ref = page_index.entry(page_data).or_insert(page_number);
-    //     if page_ref == page_number {
-    //         page_number += 1
-    //     }
-    //     writeln!(grapheme_property_rs, "\t {page_ref}, // {page:#x}")?;
-    // }
-    // writeln!(grapheme_property_rs, "];")?;
-    //
-    // let cat_pages = page_index.iter()
-    //     .map(|(k, v)| (v,k))
-    //     .sorted_by(|(a,_),(b,_)| Ord::cmp(a,b))
-    //     .map(|(_, page)| page )
-    //     .collect_vec();
-    // writeln!(grapheme_property_rs, "pub const GP_PAGES: [[u8;256];{}] = {cat_pages:#x?};", cat_pages.len())?;
-    //
-    // Ok(())
 }
 
 fn write_data_tables(mut rust_file : File, raw_data: &[u8], table_name: &str, pages_name: &str) -> anyhow::Result<()> {
