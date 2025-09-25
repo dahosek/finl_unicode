@@ -85,7 +85,7 @@ specification discourages the use of legacy clustering which is only documented 
 ## Unicode copyright notice
 
 This package incorporates data from Unicode Inc.
-Copyright © 1991–2022 Unicode, Inc. All rights reserved.
+Copyright © 1991–2025 Unicode, Inc. All rights reserved.
 
 ## Support
 
@@ -101,6 +101,7 @@ I guarantee no warranty or support, although if you care to throw some money my 
 - **1.1.0** Add support for Unicode 15.0.0, added new benchmark comparisons.
 - **1.2.0** Allow grapheme clustering to work on any `Peekable` iterator over `char` or `(usize,char)`.
 - **1.3.0** Add support for Unicode 16.0.0 (significant changes required for Indic Conjunct clusters), update license documentation and benchmark comparisons.
+- **1.4.0** Add support for Unicode 17.0.0
 
 ---
 

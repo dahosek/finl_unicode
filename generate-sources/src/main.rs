@@ -9,7 +9,7 @@ use reqwest::blocking::Client;
 use itertools::Itertools;
 
 fn main() -> anyhow::Result<()> {
-    let unicode_version = "16.0.0";
+    let unicode_version = "17.0.0";
     let mut out_dir = env::var_os("CARGO_MANIFEST_DIR").unwrap();
     out_dir.push("/target/tmp/");
     if !Path::new(&out_dir).try_exists()? {
