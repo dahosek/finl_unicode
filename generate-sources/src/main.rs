@@ -9,7 +9,7 @@ use reqwest::blocking::Client;
 use itertools::Itertools;
 
 fn main() -> anyhow::Result<()> {
-    let unicode_version = "17.0.0";
+    let unicode_version = "18.0.0";
     let mut out_dir = env::var_os("CARGO_MANIFEST_DIR").unwrap();
     out_dir.push("/target/tmp/");
     if !Path::new(&out_dir).try_exists()? {
@@ -187,12 +187,14 @@ fn build_grapheme_break_test(out_dir: &OsString, grapheme_break_test_txt: &PathB
     writeln!(grapheme_test_rs)?;
     writeln!(grapheme_test_rs, "use crate::grapheme_clusters::tests::grapheme_test;")?;
     writeln!(grapheme_test_rs)?;
-    writeln!(grapheme_test_rs, "#[test]")?;
-    writeln!(grapheme_test_rs, "fn standard_grapheme_test() {{")?;
+    let mut test_number = 0;
     for line in grapheme_break_test.lines() {
         let line = line.unwrap();
         if let Some((map, comment)) = line.split_once('#') {
             if map.len() > 0 {
+                test_number += 1;
+                writeln!(grapheme_test_rs, "#[test]")?;
+                writeln!(grapheme_test_rs, "fn grapheme_cluster_test_{test_number}() {{")?;
                 let mut input_string = String::new();
                 let mut output_string:Vec<String> = vec!();
                 let mut current_grapheme = String::new();
@@ -218,10 +220,11 @@ fn build_grapheme_break_test(out_dir: &OsString, grapheme_break_test_txt: &PathB
                 let output_string = output_string.join("\", \"");
 
                 writeln!(grapheme_test_rs, "\tgrapheme_test(\"{input_string}\",\n\t\t&[\"{output_string}\"],\n\t\t\"{comment}\"\n\t);")?;
+                writeln!(grapheme_test_rs, "}}")?;
+
             }
         }
     }
-    writeln!(grapheme_test_rs, "}}")?;
     Ok(())
 }
 
@@ -295,7 +298,11 @@ fn build_grapheme_break_property(out_dir: &OsString, grapheme_break_property_txt
     }
 
     // update conjunct cluster characteristics
-    // We set the high nibble to 2x for consonants and 1x for linkers
+    // We set the high nibble to 2x for consonants, 1x for linkers, and 4x for InCB=Extend.
+    // InCB=Extend is not simply "Grapheme_Cluster_Break=Extend": most Extend/ZWJ characters
+    // are also InCB=Extend, but ZWNJ (U+200C) is a notable exception (GCB=Extend, InCB=None)
+    // used specifically to suppress conjunct formation, so this must be tracked as its own bit
+    // rather than inferred from the base Grapheme_Cluster_Break property.
     for line in derived_core_properties.lines() {
         let line = line.unwrap();
         if let Some((line, _)) = line.split_once('#') {
@@ -308,6 +315,9 @@ fn build_grapheme_break_property(out_dir: &OsString, grapheme_break_property_txt
                 }
                 if property == "InCB; Consonant" {
                     raw_grapheme_properties.get_mut(str_to_range(range)).unwrap().iter_mut().for_each(|x| *x |= 0x20);
+                }
+                if property == "InCB; Extend" {
+                    raw_grapheme_properties.get_mut(str_to_range(range)).unwrap().iter_mut().for_each(|x| *x |= 0x40);
                 }
             }
         }

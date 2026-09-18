@@ -18,8 +18,9 @@ There is also a pure cluster iterator available by calling `Graphemes::new(s)` o
 ## Why?
 
 There *are* existing crates for these purposes, but segmentation lacked the interface for segmentation that I wanted (which was to be able to extend `Peekable<CharIndices>` with a method to fetch the next grapheme cluster if it existed). 
-I incorrectly assumed that this would require character code identification, which turned out to be incorrect, but it turned out that the crate I was using was outdated and possibly abandoned and had an inefficient algorithm so it turned out to be a good thing that I wrote it.
-I did benchmarks comparing my code against existing crates and discovered that I had managed to eke out performance gains against all of them, so that’s an added bonus.
+I incorrectly assumed that this would require character code identification, which turned out to be incorrect. 
+It turned out, though, that the crate I was using was outdated and possibly abandoned and had an inefficient algorithm so it turned out to be a good thing that I wrote it.
+I benchmarked my code against existing crates and discovered that I had managed to eke out performance gains against all of them, so that’s an added bonus.
 
 ###  Benchmark results
 
@@ -35,44 +36,49 @@ All letters and lowercase letters are counted in two benchmarks as with the Czec
 
 I compared against [unicode_categories](https://docs.rs/unicode_categories/latest/unicode_categories/) 0.1.1. All times are in ms. Smaller is better.
 
-| Benchmark                | `finl_unicode`              | `unicode_categories`     |
-|--------------------------|-----------------------------|--------------------------|
-| Japanese text            | 0.26318/**0.26356**/0.26397 | 11.055/**11.071**/11.088 |
-| Czech text               | 0.07618/**0.07631**/0.07645 | 2.6268/**2.6293**/2.6316 |
-| Czech text (lowercase)   | 0.07601/**0.07614**/0.07626 | 1.4984/**1.4999**/1.5014 |
-| English text             | 0.24668/**0.24693**/0.24723 | 11.173/**11.185**/11.195 |
-| English text (lowercase) | 0.24682/**0.24707**/0.24735 | 7.8968/**7.9050**/7.9127 |
-| Source code              | 0.02738/**0.02745**/0.02753 | 1.5738/**1.5760**/1.5787 |
-| Source code (lowercase)  | 0.02733/**0.02735**/0.02738 | 0.7285/**0.7536**/0.7821 | 
+| Benchmark                | `finl_unicode`                 | `unicode_categories`        |
+|--------------------------|--------------------------------|-----------------------------|
+| Japanese text            | 0.26186/**0.26309**/0.26426    | 6.7822/**6.8678**/6.9641    |
+| Czech text               | 0.07606/**0.07626**/0.07647    | 1.7192/**1.7210**/1.7228    |
+| Czech text (lowercase)   | 0.07676/**0.07696**/0.07718    | 0.58069/**0.58166**/0.58256 |
+| English text             | 0.24904/**0.24938**/0.24973    | 7.0234/**7.0307**/7.0384    |
+| English text (lowercase) | 0.24759/**0.24806**/0.24849    | 2.6752/**2.6807**/2.6871    |
+| Source code              | 0.02762/**0.02766**/0.02771    | 1.0610/**1.0628**/1.0646    |
+| Source code (lowercase)  | 0.02753/**0.02756**/0.02760    | 0.30376/**0.30419**/0.30464 |
 
 As you can see, this is a clear win (the difference is the choice of algorithm. `finl_unicode` uses two-step table lookup to be able to store categories compactly while `unicode_categories` uses a combination of range checks and binary searches on tables).
 
 #### Grapheme clusters
 
-I compared against [unicode_segmentation](https://docs.rs/unicode-segmentation/latest/unicode_segmentation/) 1.9.0 (part of the unicode-rs project) and [bstr](https://docs.rs/bstr/latest/bstr/) 1.0.0. 
+I compared against [unicode_segmentation](https://docs.rs/unicode-segmentation/latest/unicode_segmentation/) 1.13.3 (part of the unicode-rs project) and [bstr](https://docs.rs/bstr/latest/bstr/) 1.13.1. 
 Comparisons are run against graphemes.txt, derived from the Unicode test suite, plus several language
 texts that were part of the `unicode_segmentation` benchmark suite. 
 
 All times are in µs, smaller is better.
 
-| Benchmark         | `finl_unicde`            | `unicode_segmentation`   | `bstr`                   |
+| Benchmark         | `finl_unicode`           | `unicode_segmentation`   | `bstr`                   |
 |-------------------|--------------------------|--------------------------|--------------------------|
-| Unicode graphemes | 63.692/**63.813**/63.948 | 323.64/**324.08**/324.47 | 273.24/**273.87**/274.63 |
-| Arabic text       | 123.67/**124.02**/124.41 | 544.88/**545.97**/547.05 | 1055.7/**1057.8**/1059.8 |
-| English text      | 164.48/**164.56**/164.65 | 1057.6/**1061.1**/1064.7 | 349.35/**349.79**/350.26 |
-| Hindi text        | 94.467/**94.665**/94.865 | 604.75/**605.38**/606.01 | 838.03/**840.19**/842.23 |
-| Japanese text     | 70.491/**70.573**/70.685 | 451.89/**452.88**/453.88 | 997.97/**1000.5**/1003.4 |
-| Korean text       | 161.34/**161.79**/162.24 | 600.55/**602.49**/604.49 | 1291.9/**1293.5**/1295.1 |
-| Mandarin text     | 67.667/**67.792**/67.941 | 387.86/**388.61**/389.37 | 919.42/**920.86**/922.38 |
-| Russian text      | 127.03/**127.30**/127.60 | 609.74/**610.91**/612.12 | 873.43/**877.29**/881.24 |
-| Source code       | 176.73/**178.05**/180.91 | 1067.4/**1070.8**/1074.4 | 494.43/**495.96**/497.62 |
+| Unicode graphemes | 59.278/**59.467**/59.655 | 221.38/**221.85**/222.30 | 264.32/**264.69**/265.11 |
+| Arabic text       | 114.18/**114.38**/114.64 | 319.08/**319.66**/320.32 | 1026.9/**1029.4**/1031.9 |
+| English text      | 153.52/**153.93**/154.32 | 457.82/**458.61**/459.50 | 342.12/**342.75**/343.39 |
+| Hindi text        | 93.938/**94.297**/94.643 | 398.63/**399.29**/400.07 | 818.92/**820.40**/821.83 |
+| Japanese text     | 65.340/**65.505**/65.674 | 321.58/**322.04**/322.51 | 961.61/**962.63**/963.81 |
+| Korean text       | 146.77/**147.12**/147.48 | 405.77/**406.28**/406.82 | 1273.6/**1275.9**/1278.1 |
+| Mandarin text     | 62.777/**62.919**/63.079 | 303.46/**303.88**/304.33 | 875.31/**877.98**/880.79 |
+| Russian text      | 114.97/**115.21**/115.48 | 324.40/**324.88**/325.42 | 898.84/**903.20**/907.83 |
+| Source code       | 162.18/**162.47**/162.80 | 451.11/**451.79**/452.55 | 480.84/**481.80**/482.94 |
 
 With the move from benchmarking on Intel to Apple Silicon, the performance difference for my code versus the other
-libraries was generally expanded. I’m curious as to explanations for why this might happen.
+libraries were generally expanded, but it appears that with updates, that difference has narrowed in some cases.
+In the course of the latest updates to handle indic conjunct clustering, some minor internal changes were done to the
+routine which gave minor speed increases for non-Hindi text after an initial performance regression.
 
 ## Why not?
 
-You may want to avoid this if you need `no_std` (maybe I’ll cover that in a future version, but probably not). 
+You may want to avoid this if you need `no_std` (I’m looking at an update that will create a new contract for clusters
+which will remove the allocations and I just need to decide whether this will involve removing the existing interface or merely
+deprecating it). 
+
 If you need other clustering algorithms, I have no near future plans to implement them (but I would do it for money). 
 
 There is no equivalent to `unicode_segmentation`’s `GraphemeCursor` as I don’t need that functionality 
@@ -89,7 +95,7 @@ Copyright © 1991–2025 Unicode, Inc. All rights reserved.
 
 ## Support
 
-I’ve released this under an MIT/Apache license. Do what you like with it. 
+I’ve released this under an MIT/Apache License. Do what you like with it. 
 I wouldn’t mind contributions to the ongoing support of developing finl, but they’re not necessary (although if you’re Microsoft or Google and you use my code, surely you can throw some dollars in my bank account).
 I guarantee no warranty or support, although if you care to throw some money my way, I can prioritize your requests.
 
@@ -102,10 +108,11 @@ I guarantee no warranty or support, although if you care to throw some money my 
 - **1.2.0** Allow grapheme clustering to work on any `Peekable` iterator over `char` or `(usize,char)`.
 - **1.3.0** Add support for Unicode 16.0.0 (significant changes required for Indic Conjunct clusters), update license documentation and benchmark comparisons.
 - **1.4.0** Add support for Unicode 17.0.0
+- **1.5.0** Add support for Unicode 18.0.0 (more changes for Indic Conjunct clusters), some internal improvements.
 
 ---
 
-1. For technical reasons, the iterator extension returns `Option<String>` rather than `Option<&str>` and thus will autmoatically underperform other implementations which are returning *all* the grapheme clusters. 
+1. For technical reasons, the iterator extension returns `Option<String>` rather than `Option<&str>` and thus will automatically underperform other implementations which are returning *all* the grapheme clusters. 
 For finl, however, I would need an owned value for the string containing the cluster anyway and since I only occasionally need a cluster, I decided it was acceptable to take the performance hit. 
 But see the benchmark results for the fact that I apparently managed to implement a faster algorithm anyway when doing an apples-to-apples comparison of speeds. 
 2. Pure speculation, but I think that this might be the entire reason for the difference in performance between `finl_unicode` and `unicode_segmentation`. However, I have not looked at the source code to confirm my suspicion.
