@@ -14,6 +14,8 @@
 //!
 //! Building the crate runs a build script which connects to unicode.org to download the data files.
 
+#![cfg_attr(not(feature="std"), no_std)]
+
 #[cfg(feature = "categories")]
 pub mod categories;
 

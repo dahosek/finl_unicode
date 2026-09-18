@@ -23,9 +23,12 @@
 //! assert_eq!(graphemes.collect::<Vec<&str>>(), ["A\u{301}", "✋🏽", "🇦🇹", "!"])
 //! ```
 
-use std::iter::Peekable;
-use std::str::CharIndices;
+use core::iter::Peekable;
+use core::str::CharIndices;
 use crate::data::grapheme_property::{GP_PAGES,GP_TABLE};
+
+extern crate alloc;
+use alloc::string::String;
 
 
 /// `Graphemes` provides an iterator over the grapheme clusters of a string.

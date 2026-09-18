@@ -20,7 +20,8 @@ unicode-segmentation = "1.13.3"
 bstr = "1.13.1"
 
 [features]
-default = ["categories", "grapheme_clusters"]
+default = ["categories", "grapheme_clusters", "std"]
+std = []
 categories = []
 grapheme_clusters = []
 
