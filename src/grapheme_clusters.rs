@@ -187,6 +187,8 @@ enum ClusterMachineState {
     Emoji,
     EmojiZWJ,
     IndicClusterStart,
+    EmojiIndic,
+    EmojiZWJIndic,
     Other,
 }
 
@@ -351,60 +353,12 @@ impl ClusterMachine {
                     }
                 }
             }
-            ClusterMachineState::Emoji => {
-                if is_incb_linker(property) { // GB9c
-                    self.handle_linker(property)
-                } else {
-                    match base {
-                        GraphemeProperty::ZWJ => {
-                            self.state = ClusterMachineState::EmojiZWJ;
-                            Break::None
-                        }
-                        GraphemeProperty::EXTEND | GraphemeProperty::SPACING_MARK => {
-                            self.state = ClusterMachineState::Emoji;
-                            Break::None
-                        }
-                        _ => {
-                            Break::Before
-                        }
-                    }
-                }
-            }
-            ClusterMachineState::EmojiZWJ => {
-                if base == GraphemeProperty::EXTENDED_GRAPHEME {
-                    self.state = ClusterMachineState::Emoji;
-                    Break::None
-                } else {
-                    Break::Before
-                }
-            }
+            ClusterMachineState::Emoji
+            | ClusterMachineState::EmojiZWJ
+            | ClusterMachineState::IndicClusterStart
+            | ClusterMachineState::EmojiIndic
+            | ClusterMachineState::EmojiZWJIndic => self.continue_emoji_or_indic(property, base),
             ClusterMachineState::CrLf => Break::Before,
-            ClusterMachineState::IndicClusterStart => {
-                // GB9c: \p{InCB=Linker} \p{InCB=Extend}* × \p{InCB=Consonant}
-                if is_incb_linker(property) {
-                    // A later Linker (e.g. a second virama) re-arms the run for GB9c purposes;
-                    // whether it also attaches to what preceded it is an ordinary GB9 question.
-                    self.handle_linker(property)
-                } else if is_incb_extend(property) {
-                    // Genuinely part of the \p{InCB=Extend}* run: stays armed for GB9c.
-                    Break::None
-                } else if is_extend_like(property) {
-                    // Attaches per plain GB9 (Extend/SpacingMark/ZWJ base) but is NOT InCB=Extend
-                    // (e.g. ZWNJ, U+200C, which is deliberately excluded from InCB=Extend so it
-                    // can be used to suppress conjunct formation). It joins the cluster but
-                    // disarms GB9c: a following Consonant no longer gets a free pass.
-                    self.state = ClusterMachineState::Other;
-                    Break::None
-                } else if property == GraphemeProperty::IN_CONSONANT {
-                    // The consonant closes this GB9c run, but it becomes an ordinary
-                    // base character: further Extend/ZWJ/SpacingMark still attach to it,
-                    // and a following Linker can open a new GB9c run in the same cluster.
-                    self.state = ClusterMachineState::Other;
-                    Break::None
-                } else {
-                    Break::Before
-                }
-            }
             _ => {
                 if is_incb_linker(property) { // GB9c
                     self.handle_linker(property)
@@ -415,6 +369,57 @@ impl ClusterMachine {
                 }
             }
         }
+    }
+    /// Handles the states in which GB11 (emoji ZWJ sequences) and/or GB9c (Indic conjuncts) may
+    /// still allow a join. The two rules can be pending at the same time (e.g. an emoji followed
+    /// by a virama, which is both GCB=Extend and InCB=Linker), so each state records both:
+    /// - GB11 `\p{ExtPict} Extend* ZWJ × \p{ExtPict}`: `Emoji*` states have seen the ExtPict and
+    ///   only Extend since; `EmojiZWJ*` states have additionally just seen the ZWJ.
+    /// - GB9c `\p{InCB=Linker} [\p{InCB=Extend}\p{InCB=Linker}]* × \p{InCB=Consonant}`:
+    ///   `IndicClusterStart` and the `*Indic` states are armed for a following Consonant.
+    #[inline]
+    fn continue_emoji_or_indic(&mut self, property: u8, base: u8) -> Break {
+        let after_pict = matches!(self.state, ClusterMachineState::Emoji | ClusterMachineState::EmojiIndic);
+        let armed = matches!(self.state,
+            ClusterMachineState::IndicClusterStart | ClusterMachineState::EmojiIndic | ClusterMachineState::EmojiZWJIndic);
+
+        if armed && property == GraphemeProperty::IN_CONSONANT { // GB9c
+            // The consonant closes this GB9c run, but it becomes an ordinary
+            // base character: further Extend/ZWJ/SpacingMark still attach to it,
+            // and a following Linker can open a new GB9c run in the same cluster.
+            self.state = ClusterMachineState::Other;
+            return Break::None;
+        }
+        if base == GraphemeProperty::EXTENDED_GRAPHEME {
+            // GB11
+            return if matches!(self.state, ClusterMachineState::EmojiZWJ | ClusterMachineState::EmojiZWJIndic) {
+                self.state = ClusterMachineState::Emoji;
+                Break::None
+            } else {
+                Break::Before
+            };
+        }
+        if !is_extend_like(property) {
+            // Includes a non-attaching Linker (e.g. U+1CF5, InCB=Linker but GCB=Other); the
+            // discarded `ClusterMachine` doesn't need its state updated (see `find_cluster`).
+            return Break::Before;
+        }
+
+        // GB9/GB9a: Extend/SpacingMark/ZWJ always attach; what's left is which rules stay pending.
+        // A later Linker (e.g. a second virama) re-arms GB9c; InCB=Extend keeps it armed; anything
+        // else (e.g. ZWNJ, U+200C, deliberately excluded from InCB=Extend so it can suppress
+        // conjunct formation, or a SpacingMark) disarms it.
+        let armed = is_incb_linker(property) || (armed && is_incb_extend(property));
+        // GB11 allows only Extend* then a single ZWJ between the two ExtPicts.
+        self.state = match (after_pict && base == GraphemeProperty::EXTEND, after_pict && base == GraphemeProperty::ZWJ, armed) {
+            (true, _, false) => ClusterMachineState::Emoji,
+            (true, _, true) => ClusterMachineState::EmojiIndic,
+            (_, true, false) => ClusterMachineState::EmojiZWJ,
+            (_, true, true) => ClusterMachineState::EmojiZWJIndic,
+            (false, false, true) => ClusterMachineState::IndicClusterStart,
+            (false, false, false) => ClusterMachineState::Other,
+        };
+        Break::None
     }
     #[inline]
     fn handle_linker(&mut self, property: u8) -> Break {
@@ -593,6 +598,30 @@ pub (crate) mod tests {
         assert_eq!(Some("\r\n".to_string()), peekable_index.next_cluster());
         assert_eq!(Some("e\u{301}".to_string()), peekable_index.next_cluster());
         assert_eq!(Some("f".to_string()), peekable_index.next_cluster());
+    }
+
+    // Cases not covered by GraphemeBreakTest.txt, checked against unicode-segmentation.
+    #[test]
+    fn emoji_zwj_then_extend_like() {
+        grapheme_test("\u{1F6D1}\u{200D}\u{0308}", &["\u{1F6D1}\u{200D}\u{0308}"], "GB9: Extend after emoji ZWJ");
+        grapheme_test("\u{1F6D1}\u{200D}\u{200D}", &["\u{1F6D1}\u{200D}\u{200D}"], "GB9: ZWJ after emoji ZWJ");
+        grapheme_test("\u{1F6D1}\u{200D}\u{0903}", &["\u{1F6D1}\u{200D}\u{0903}"], "GB9a: SpacingMark after emoji ZWJ");
+        grapheme_test("\u{1F6D1}\u{200D}\u{0308}\u{1F6D1}", &["\u{1F6D1}\u{200D}\u{0308}", "\u{1F6D1}"], "GB11: Extend after ZWJ breaks the sequence");
+        grapheme_test("\u{1F6D1}\u{200D}\u{094D}\u{0915}", &["\u{1F6D1}\u{200D}\u{094D}\u{0915}"], "GB9c: Linker after emoji ZWJ");
+    }
+
+    #[test]
+    fn emoji_spacing_mark_does_not_continue_gb11() {
+        grapheme_test("\u{1F6D1}\u{0903}\u{200D}\u{1F6D1}", &["\u{1F6D1}\u{0903}\u{200D}", "\u{1F6D1}"], "GB11: only Extend* before ZWJ");
+    }
+
+    #[test]
+    fn emoji_linker_keeps_gb11_and_gb9c() {
+        grapheme_test("\u{1F6D1}\u{094D}\u{200D}\u{1F6D1}", &["\u{1F6D1}\u{094D}\u{200D}\u{1F6D1}"], "GB11: virama is Extend");
+        grapheme_test("\u{1F6D1}\u{0308}\u{094D}\u{200D}\u{1F6D1}", &["\u{1F6D1}\u{0308}\u{094D}\u{200D}\u{1F6D1}"], "GB11: Extend then virama");
+        grapheme_test("\u{1F6D1}\u{094D}\u{0915}", &["\u{1F6D1}\u{094D}\u{0915}"], "GB9c: virama after emoji");
+        grapheme_test("\u{1F6D1}\u{094D}\u{200D}\u{0915}", &["\u{1F6D1}\u{094D}\u{200D}\u{0915}"], "GB9c: ZWJ is InCB=Extend");
+        grapheme_test("\u{1F6D1}\u{094D}\u{200C}\u{0915}", &["\u{1F6D1}\u{094D}\u{200C}", "\u{0915}"], "GB9c: ZWNJ disarms");
     }
 
     pub (crate) fn grapheme_test(input: &str, expected_output: &[&str], message: &str) {

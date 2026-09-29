@@ -1,7 +1,7 @@
 # finl Unicode support
 
 This crate is designed for the Unicode needs of the finl project, but is designed to be usable by other software as well.
-In the current release (1.0.x), support is provided for character code identification and grapheme segmentation and Unicode14.0.0.
+In the current release (1.5.x), support is provided for character code identification and grapheme segmentation and Unicode18.0.0.
 
 ## Overview 
 
@@ -109,6 +109,7 @@ I guarantee no warranty or support, although if you care to throw some money my 
 - **1.3.0** Add support for Unicode 16.0.0 (significant changes required for Indic Conjunct clusters), update license documentation and benchmark comparisons.
 - **1.4.0** Add support for Unicode 17.0.0
 - **1.5.0** Add support for Unicode 18.0.0 (more changes for Indic Conjunct clusters), some internal improvements.
+- **1.5.1** Fix grapheme clustering of emoji ZWJ sequences: Extend/SpacingMark/ZWJ after an emoji ZWJ now attach (GB9/GB9a), a SpacingMark no longer continues a GB11 sequence, and a virama after an emoji no longer blocks GB11.
 
 ---
 
