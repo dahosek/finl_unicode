@@ -1,5 +1,5 @@
 // GENERATED CODE DO NOT MANUALLY EDIT
-pub const CAT_TABLE: [u8;0x1100] = [
+pub static CAT_TABLE: [u8;0x1100] = [
 	 0, // 0x0
 	 1, // 0x1
 	 2, // 0x2
@@ -4353,7 +4353,7 @@ pub const CAT_TABLE: [u8;0x1100] = [
 	 60, // 0x10fe
 	 165, // 0x10ff
 ];
-pub const CAT_PAGES: [[u8;256];166] = [
+pub static CAT_PAGES: [[u8;256];166] = [
     [
         0x61,
         0x61,
