@@ -2,6 +2,8 @@
 //! or retrieving the Unicode category for the character as well as two `enum`s for identifying
 //! character classes.
 
+use crate::data::characters::{CAT_PAGES, CAT_TABLE};
+
 /// Trait to provide methods that provide boolean tests on most Unicode character categories.
 ///
 /// There is no `is_surrogate()` method since surrogate character codes are not valid values
@@ -13,10 +15,6 @@
 /// determination of character codes. Some special tricks are employed to enable fast determination
 /// of composite classes (L, LC, M, N, P, S, Z, C) without requiring a check for each individual
 /// sub-class.
-///
-
-use crate::data::characters::{CAT_PAGES, CAT_TABLE};
-
 pub trait CharacterCategories {
     /// Determines whether a character is class L, letter (Lu, Ll, Lt, Lm, Lo). This includes all
     /// characters used for word formation, both phonetic and ideograms. It does not include symbols
@@ -101,7 +99,7 @@ pub trait CharacterCategories {
     /// Determines whether a character is an open punctuation character (Ps). This includes all the
     /// variations on parentheses, braces and brackets in different scripts including mathematical
     /// and computational special symbols along with the low-9
-    /// single and double quotation markes (‚ and „) but *not* other quotation marks.
+    /// single and double quotation marks (‚ and „) but *not* other quotation marks.
     fn is_punctuation_open(self) -> bool;
     /// Determines whether a character is a close punctuation character (Pe). This includes all the
     /// variations on parentheses, braces and brackets in different scripts including mathematical
@@ -114,7 +112,7 @@ pub trait CharacterCategories {
     fn is_punctuation_initial(self) -> bool;
     /// Determines whether a character is a final punctuation character (Pf). This includes variations
     /// on closing quotation marks, functionally similar symbols from the New Testament editorial
-    /// symbols set and the left vertical bar with quill (which is apparently meant to be used to
+    /// symbols set and the right vertical bar with quill (which is apparently meant to be used to
     /// build extended versions of ⁆ if I understand the reference in the Unicode character chart).
     fn is_punctuation_final(self) -> bool;
     /// Determines whether a character is an other punctuation character (Po). This is all the punctuation
@@ -138,7 +136,7 @@ pub trait CharacterCategories {
     fn is_separator(self) -> bool;
     /// Determines whether a character is a space separator (Zs). In addition to the standard space
     /// and the non-breaking space (U+A0), there are various typographic spaces and the Ogham space
-    /// mark but printed spaces from other scripts such as the Ge'ez word space (፡).
+    /// mark but not printed spaces from other scripts such as the Ge'ez word space (፡).
     fn is_separator_space(self) -> bool;
     /// Determines whether a character is a line separator (Zl). This is the Unicode code point U+2028.
     fn is_separator_line(self) -> bool;
@@ -168,7 +166,7 @@ pub trait CharacterCategories {
     /// Nd, Nl, No,
     /// Pc, Pd, Ps, Pi, Pf, Po,
     /// Sm, Sk, Sc, So,
-    /// Za, Zl, Zp,
+    /// Zs, Zl, Zp,
     /// Cc, Cf, Co, Cn). Note that the “special” category
     /// of LC cannot be returned by this method since it is not a mutually exclusive category.
     fn get_minor_category(self) -> MinorCategory;

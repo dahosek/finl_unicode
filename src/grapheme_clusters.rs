@@ -211,8 +211,10 @@ impl ClusterMachine {
         }
     }
 
-    /// If we have a cluster, we return the cluster in a `String` in an `Option` long with a `bool`
-    /// If the `bool` is true, it means that we are also consuming the character  in the cluster.
+    /// Feeds the next character `c` to the state machine and reports where the cluster boundary
+    /// falls: `Break::None` if `c` continues the current cluster, `Break::Before` if the cluster
+    /// ends before `c` (which starts the next one), or `Break::After` if `c` completes the
+    /// current cluster.
     #[inline]
     pub fn find_cluster(&mut self, c: char) -> Break {
         if self.state == ClusterMachineState::Start {
