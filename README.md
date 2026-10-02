@@ -36,15 +36,15 @@ All letters and lowercase letters are counted in two benchmarks as with the Czec
 
 I compared against [unicode_categories](https://docs.rs/unicode_categories/latest/unicode_categories/) 0.1.1. All times are in ms. Smaller is better.
 
-| Benchmark                | `finl_unicode`                 | `unicode_categories`        |
-|--------------------------|--------------------------------|-----------------------------|
-| Japanese text            | 0.26186/**0.26309**/0.26426    | 6.7822/**6.8678**/6.9641    |
-| Czech text               | 0.07606/**0.07626**/0.07647    | 1.7192/**1.7210**/1.7228    |
-| Czech text (lowercase)   | 0.07676/**0.07696**/0.07718    | 0.58069/**0.58166**/0.58256 |
-| English text             | 0.24904/**0.24938**/0.24973    | 7.0234/**7.0307**/7.0384    |
-| English text (lowercase) | 0.24759/**0.24806**/0.24849    | 2.6752/**2.6807**/2.6871    |
-| Source code              | 0.02762/**0.02766**/0.02771    | 1.0610/**1.0628**/1.0646    |
-| Source code (lowercase)  | 0.02753/**0.02756**/0.02760    | 0.30376/**0.30419**/0.30464 |
+| Benchmark                | `finl_unicode`              | `unicode_categories`        |
+|--------------------------|-----------------------------|-----------------------------|
+| Japanese text            | 0.26270/**0.26330**/0.26394 | 6.5762/**6.5904**/6.6051    |
+| Czech text               | 0.07565/**0.07595**/0.07624 | 1.7186/**1.7261**/1.7345    |
+| Czech text (lowercase)   | 0.07642/**0.07680**/0.07717 | 0.58435/**0.58744**/0.59079 |
+| English text             | 0.24936/**0.25033**/0.25132 | 6.9849/**7.0021**/7.0219    |
+| English text (lowercase) | 0.24601/**0.24646**/0.24694 | 2.6310/**2.6340**/2.6371    |
+| Source code              | 0.02727/**0.02733**/0.02740 | 1.0621/**1.0652**/1.0687    |
+| Source code (lowercase)  | 0.02736/**0.02741**/0.02745 | 0.30283/**0.30362**/0.30446 |
 
 As you can see, this is a clear win (the difference is the choice of algorithm. `finl_unicode` uses two-step table lookup to be able to store categories compactly while `unicode_categories` uses a combination of range checks and binary searches on tables).
 
@@ -58,20 +58,22 @@ All times are in µs, smaller is better.
 
 | Benchmark         | `finl_unicode`           | `unicode_segmentation`   | `bstr`                   |
 |-------------------|--------------------------|--------------------------|--------------------------|
-| Unicode graphemes | 59.278/**59.467**/59.655 | 221.38/**221.85**/222.30 | 264.32/**264.69**/265.11 |
-| Arabic text       | 114.18/**114.38**/114.64 | 319.08/**319.66**/320.32 | 1026.9/**1029.4**/1031.9 |
-| English text      | 153.52/**153.93**/154.32 | 457.82/**458.61**/459.50 | 342.12/**342.75**/343.39 |
-| Hindi text        | 93.938/**94.297**/94.643 | 398.63/**399.29**/400.07 | 818.92/**820.40**/821.83 |
-| Japanese text     | 65.340/**65.505**/65.674 | 321.58/**322.04**/322.51 | 961.61/**962.63**/963.81 |
-| Korean text       | 146.77/**147.12**/147.48 | 405.77/**406.28**/406.82 | 1273.6/**1275.9**/1278.1 |
-| Mandarin text     | 62.777/**62.919**/63.079 | 303.46/**303.88**/304.33 | 875.31/**877.98**/880.79 |
-| Russian text      | 114.97/**115.21**/115.48 | 324.40/**324.88**/325.42 | 898.84/**903.20**/907.83 |
-| Source code       | 162.18/**162.47**/162.80 | 451.11/**451.79**/452.55 | 480.84/**481.80**/482.94 |
+| Unicode graphemes | 54.690/**54.801**/54.918 | 220.05/**220.34**/220.63 | 262.26/**263.05**/263.89 |
+| Arabic text       | 108.41/**108.87**/109.34 | 315.56/**316.26**/317.00 | 1031.0/**1034.8**/1038.8 |
+| English text      | 151.20/**151.47**/151.77 | 468.32/**469.54**/470.85 | 342.28/**343.43**/344.69 |
+| Hindi text        | 84.608/**85.208**/85.898 | 395.39/**396.49**/397.72 | 823.94/**825.76**/827.68 |
+| Japanese text     | 64.420/**64.524**/64.631 | 319.04/**319.58**/320.13 | 964.42/**966.19**/968.03 |
+| Korean text       | 115.66/**116.03**/116.41 | 404.36/**405.57**/406.87 | 1267.5/**1269.9**/1272.4 |
+| Mandarin text     | 61.850/**61.965**/62.102 | 302.59/**303.48**/304.50 | 875.73/**877.33**/878.99 |
+| Russian text      | 108.96/**109.30**/109.77 | 322.96/**324.14**/325.35 | 860.84/**868.11**/875.76 |
+| Source code       | 159.04/**159.29**/159.57 | 459.64/**460.81**/461.96 | 482.66/**484.42**/486.23 |
 
 With the move from benchmarking on Intel to Apple Silicon, the performance difference for my code versus the other
 libraries were generally expanded, but it appears that with updates, that difference has narrowed in some cases.
 In the course of the latest updates to handle indic conjunct clustering, some minor internal changes were done to the
 routine which gave minor speed increases for non-Hindi text after an initial performance regression.
+In 1.5.1, restructuring the emoji/Indic states of the clustering state machine and storing the lookup tables as
+`static` rather than `const` gave a further 2–10% speedup on most texts (about 20% on Korean).
 
 ## Why not?
 
