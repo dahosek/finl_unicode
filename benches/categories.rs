@@ -40,12 +40,12 @@ pub fn text_benchmark(c: &mut Criterion, source_file_name: &str, group_name: &st
     let mut group = c.benchmark_group(group_name);
     group.bench_function("finl_unicode",
                          |b| b.iter(|| {
-                             input_text.chars().filter(|c| finl_test::letter_test(c)).count();
+                             input_text.chars().filter(finl_test::letter_test).count();
                          }),
     );
     group.bench_function("unicode_categories",
                          |b| b.iter(|| {
-                             input_text.chars().filter(|c| uc_test::letter_test(c)).count();
+                             input_text.chars().filter(uc_test::letter_test).count();
                          }),
     );
     group.finish();
@@ -56,12 +56,12 @@ pub fn text_benchmark(c: &mut Criterion, source_file_name: &str, group_name: &st
         let mut group = c.benchmark_group(group_name);
         group.bench_function("finl_unicode",
                              |b| b.iter(|| {
-                                 input_text.chars().filter(|c| finl_test::lc_test(c)).count();
+                                 input_text.chars().filter(finl_test::lc_test).count();
                              }),
         );
         group.bench_function("unicode_categories",
                              |b| b.iter(|| {
-                                 input_text.chars().filter(|c| uc_test::lc_test(c)).count();
+                                 input_text.chars().filter(uc_test::lc_test).count();
                              }),
         );
         group.finish();

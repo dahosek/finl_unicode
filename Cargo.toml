@@ -15,7 +15,6 @@ exclude = ["resources"]
 [dev-dependencies]
 criterion = { version = "0.8.2", features=["html_reports"]}
 unicode_categories = "0.1.1"
-finl_unicode = {path=".", features=["grapheme_clusters", "categories"]}
 unicode-segmentation = "1.13.3"
 bstr = "1.13.1"
 
@@ -24,12 +23,12 @@ default = ["categories", "grapheme_clusters"]
 categories = []
 grapheme_clusters = []
 
-[build-dependencies]
-
 [[bench]]
 name = "categories"
 harness = false
+required-features = ["categories"]
 
 [[bench]]
 name = "grapheme_clusters"
 harness = false
+required-features = ["grapheme_clusters"]

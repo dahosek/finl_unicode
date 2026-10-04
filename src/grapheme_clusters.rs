@@ -103,23 +103,18 @@ impl<T> GraphemeCluster<T> for T where T: PeekChar {
         if self.has_next() {
             let mut cluster_machine = ClusterMachine::new();
             let mut rv = String::new();
-            loop {
-                if let Some(ch) = self.peek_char() {
-                    let state = cluster_machine.find_cluster(ch);
-                    match state {
-                        Break::None => {
-                            rv.push(ch);
-                            self.next();
-                        }
-                        Break::Before => { return Some(rv); }
-                        Break::After => {
-                            rv.push(ch);
-                            self.next();
-                            return Some(rv);
-                        }
+            while let Some(ch) = self.peek_char() {
+                match cluster_machine.find_cluster(ch) {
+                    Break::None => {
+                        rv.push(ch);
+                        self.next();
                     }
-                } else {
-                    break;
+                    Break::Before => { return Some(rv); }
+                    Break::After => {
+                        rv.push(ch);
+                        self.next();
+                        return Some(rv);
+                    }
                 }
             }
             Some(rv)
@@ -538,10 +533,8 @@ fn base_property(property: u8) -> u8 {
 /// character per plain GB9/GB9a regardless of any InCB property it also carries.
 #[inline]
 fn is_extend_like(property: u8) -> bool {
-    match base_property(property) {
-        GraphemeProperty::EXTEND | GraphemeProperty::SPACING_MARK | GraphemeProperty::ZWJ => true,
-        _ => false,
-    }
+    matches!(base_property(property),
+        GraphemeProperty::EXTEND | GraphemeProperty::SPACING_MARK | GraphemeProperty::ZWJ)
 }
 
 
@@ -587,10 +580,16 @@ pub (crate) mod tests {
 
     #[test]
     fn low_level_interface_test() {
+        // As in the iterators, a fresh machine is used for each cluster: after a `Break::Before`
+        // the machine's state is not meaningful (see the fast path in `find_cluster`).
         let mut machine = ClusterMachine::new();
         assert_eq!(machine.find_cluster('\r'), Break::None);
         assert_eq!(machine.find_cluster('a'), Break::Before);
+        let mut machine = ClusterMachine::new();
+        assert_eq!(machine.find_cluster('a'), Break::None);
         assert_eq!(machine.find_cluster('\r'), Break::Before);
+        let mut machine = ClusterMachine::new();
+        assert_eq!(machine.find_cluster('\r'), Break::None);
         assert_eq!(machine.find_cluster('\n'), Break::After);
     }
 
@@ -634,13 +633,13 @@ pub (crate) mod tests {
         }
         let codes :Vec<u8> = input.chars().map(get_property).collect();
         assert_eq!(clusters.len(), expected_output.len(), "Lengths did not match on Grapheme Cluster\n\t{message}\n\tOutput: {clusters:?}\n\tExpected: {expected_output:?}\n\tCodes: {codes:x?}");
-        clusters.iter().zip(expected_output.into_iter())
+        clusters.iter().zip(expected_output)
             .for_each(|(actual, &expected)| assert_eq!(actual.as_str(), expected, "GraphemeCluster mismatch: {message}"));
 
         let iter = Graphemes::new(input);
         let clusters = iter.collect::<Vec<&str>>();
         assert_eq!(clusters.len(), expected_output.len(), "Lengths did not match on Grapheme Cluster Indices\n\t{message}\n\tOutput: {clusters:?}\n\tExpected: {expected_output:?}");
-        clusters.iter().zip(expected_output.into_iter())
+        clusters.iter().zip(expected_output)
             .for_each(|(actual, &expected)| assert_eq!(*actual, expected, "Grapheme cluster indices mismatch: {message}\n{} ≠ {}", actual.escape_unicode(), expected.escape_unicode()));
     }
 

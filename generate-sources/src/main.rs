@@ -156,10 +156,7 @@ fn build_character_tables(out_dir: &OsStr, unicode_data_txt: &PathBuf) -> anyhow
                     range_start = char_code;
                 }
                 else if char_name.ends_with(", Last>") {
-                    let cat_code = cat_to_u8(category);
-                    for i in range_start..=char_code {
-                        raw_categories[i] = cat_code;
-                    }
+                    raw_categories[range_start..=char_code].fill(cat_to_u8(category));
                 }
                 else {
                     raw_categories[char_code] = cat_to_u8(category);
@@ -192,7 +189,7 @@ fn build_grapheme_break_test(out_dir: &OsString, grapheme_break_test_txt: &PathB
     for line in grapheme_break_test.lines() {
         let line = line.unwrap();
         if let Some((map, comment)) = line.split_once('#') {
-            if map.len() > 0 {
+            if !map.is_empty() {
                 test_number += 1;
                 writeln!(grapheme_test_rs, "#[test]")?;
                 writeln!(grapheme_test_rs, "fn grapheme_cluster_test_{test_number}() {{")?;
@@ -203,7 +200,7 @@ fn build_grapheme_break_test(out_dir: &OsString, grapheme_break_test_txt: &PathB
                 for token in map.split_whitespace() {
                     match token {
                         "÷" => {
-                            if current_grapheme.len() > 0 {
+                            if !current_grapheme.is_empty() {
                                 output_string.push(current_grapheme);
                                 current_grapheme = String::new();
                             }
@@ -292,7 +289,16 @@ fn build_grapheme_break_property(out_dir: &OsString, grapheme_break_property_txt
                 let range = range.trim();
                 let property = property.trim();
                 if property == "Extended_Pictographic" {
-                    raw_grapheme_properties.get_mut(str_to_range(range)).unwrap().fill(0x06);
+                    // The table holds a single base property per character, so an ExtPict character
+                    // that also has its own Grapheme_Cluster_Break value can't be represented. That
+                    // doesn't happen in current Unicode data; fail loudly rather than silently
+                    // overwrite the GCB value if a future version changes that.
+                    let range = str_to_range(range);
+                    if let Some(c) = range.clone().find(|&c| raw_grapheme_properties[c] != 0) {
+                        anyhow::bail!("U+{c:04X} is Extended_Pictographic but also has Grapheme_Cluster_Break value {:#x}",
+                            raw_grapheme_properties[c]);
+                    }
+                    raw_grapheme_properties[range].fill(0x06);
                 }
             }
         }
