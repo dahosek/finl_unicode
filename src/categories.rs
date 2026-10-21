@@ -151,6 +151,14 @@ pub trait CharacterCategories {
     fn is_other(self) -> bool;
     /// Determines whether a character is a control character (Cc). These are the 65 characters in the
     /// ranges 0x00–0x1f and 0x7f–0x9f.
+    ///
+    /// **Deprecated:** use the standard library’s [`char::is_control`] instead. Because inherent
+    /// methods take precedence over trait methods, `c.is_control()` already calls the standard
+    /// library version even with this trait imported; this method is only reached through
+    /// `CharacterCategories::is_control(c)`. It now simply delegates to `char::is_control`, which
+    /// is safe because the Unicode stability policy guarantees the set of Cc characters will never
+    /// change.
+    #[deprecated(since = "1.5.1", note = "use the standard library's `char::is_control` instead, which `c.is_control()` already resolves to")]
     fn is_control(self) -> bool;
     /// Determines whether a character is a format character (Cf). This is a mix of non-printing characters
     /// like soft hyphen (U+00AD) and Zero Width Joiner (ZWJ—U+200D) and the tag block which is used
@@ -535,7 +543,8 @@ impl CharacterCategories for char {
 
     #[inline]
     fn is_control(self) -> bool {
-        get_code(self) == Cat::Cc
+        // Hard-coded ranges in std are about twice as fast as the table lookup.
+        char::is_control(self)
     }
 
     #[inline]

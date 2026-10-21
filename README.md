@@ -111,7 +111,7 @@ I guarantee no warranty or support, although if you care to throw some money my 
 - **1.3.0** Add support for Unicode 16.0.0 (significant changes required for Indic Conjunct clusters), update license documentation and benchmark comparisons.
 - **1.4.0** Add support for Unicode 17.0.0
 - **1.5.0** Add support for Unicode 18.0.0 (more changes for Indic Conjunct clusters), some internal improvements.
-- **1.5.1** Fix grapheme clustering of emoji ZWJ sequences: Extend/SpacingMark/ZWJ after an emoji ZWJ now attach (GB9/GB9a), a SpacingMark no longer continues a GB11 sequence, and a virama after an emoji no longer blocks GB11.
+- **1.5.1** Fix grapheme clustering of emoji ZWJ sequences: Extend/SpacingMark/ZWJ after an emoji ZWJ now attach (GB9/GB9a), a SpacingMark no longer continues a GB11 sequence, and a virama after an emoji no longer blocks GB11. Deprecate `CharacterCategories::is_control` in favor of the standard library’s `char::is_control` (which `c.is_control()` already resolves to); it now delegates to it.
 
 ---
 
