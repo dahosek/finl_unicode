@@ -4,7 +4,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 mod finl_test {
     use finl_unicode::grapheme_clusters::Graphemes;
 
-    pub fn read_clusters(input: &String) -> usize {
+    pub fn read_clusters(input: &str) -> usize {
         let mut cnt = 0;
         Graphemes::new(input).for_each(
             |c| {
@@ -20,7 +20,7 @@ mod finl_test {
 mod unicode_rs {
    use unicode_segmentation::UnicodeSegmentation;
 
-    pub fn read_clusters(input: &String) -> usize {
+    pub fn read_clusters(input: &str) -> usize {
         let mut cnt = 0;
         input.graphemes(true).for_each(
             |c| {
@@ -36,7 +36,7 @@ mod unicode_rs {
 mod bstr {
     use bstr::ByteSlice;
 
-    pub fn read_clusters(input: &String) -> usize {
+    pub fn read_clusters(input: &str) -> usize {
         let mut cnt = 0;
         input.as_bytes().graphemes().for_each(
             |c| {

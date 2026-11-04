@@ -56,20 +56,20 @@ fn main() -> anyhow::Result<()> {
 // - 3 Punctuation
 // - 4 Symbol
 // - 5 Separator
-// - 6 Control
-// - 7 Control
+// - 6 Other (control, format, surrogate, private use, unassigned)
 // - 8 Letter
 // - 9 Cased letter
 //
 // code & xF0 to get the larger category.
 // 8/9 for letters allows us to do code & x80 to see if its a letter
+// Letters and marks are the only categories with bits x60 clear (used by is_letter_or_mark).
 //
 // Specific codes map as follows:
 // Lu	Uppercase_Letter	x90
 // Ll	Lowercase_Letter	x91
 // Lt	Titlecase_Letter	x92
-// Lm	Modifier_Letter	    x80
-// Lo	Other_Letter	    x81
+// Lm	Modifier_Letter	    x83
+// Lo	Other_Letter	    x84
 // Mn	Nonspacing_Mark	    x10
 // Mc	Spacing_Mark	    x11
 // Me	Enclosing_Mark	    x12
@@ -90,11 +90,11 @@ fn main() -> anyhow::Result<()> {
 // Zs	Space_Separator	    x50
 // Zl	Line_Separator	    x51
 // Zp	Paragraph_Separator	x52
-// Cc	Control	            x60
-// Cf	Format	            x61
-// Cs	Surrogate	        x62
-// Co	Private_Use	        x63
-// Cn	Unassigned	        x64
+// Cn	Unassigned	        x60 (also the default for anything not listed)
+// Cc	Control	            x61
+// Cf	Format	            x62
+// Cs	Surrogate	        x63
+// Co	Private_Use	        x64
 fn cat_to_u8(cat: &str) -> u8 {
     match cat {
         "Lu" => 0x90,
@@ -139,8 +139,9 @@ fn build_character_tables(out_dir: &OsStr, unicode_data_txt: &PathBuf) -> anyhow
     let unicode_data = BufReader::new(unicode_data);
 
     // First we build a raw (large) index of all the character codes in numeric format
-    // Note that we actually allocate an array slightly larger than Unicode uses
-    let mut raw_categories = [0x60u8;0x110000];
+    // Note that we actually allocate an array slightly larger than Unicode uses. It's on the heap
+    // because 1.1MB would overflow the 1MB default main-thread stack on Windows.
+    let mut raw_categories = vec![0x60u8;0x110000];
     let mut range_start = 0;
     for line in unicode_data.lines() {
         let line = line.unwrap();
@@ -155,10 +156,7 @@ fn build_character_tables(out_dir: &OsStr, unicode_data_txt: &PathBuf) -> anyhow
                     range_start = char_code;
                 }
                 else if char_name.ends_with(", Last>") {
-                    let cat_code = cat_to_u8(category);
-                    for i in range_start..=char_code {
-                        raw_categories[i] = cat_code;
-                    }
+                    raw_categories[range_start..=char_code].fill(cat_to_u8(category));
                 }
                 else {
                     raw_categories[char_code] = cat_to_u8(category);
@@ -191,7 +189,7 @@ fn build_grapheme_break_test(out_dir: &OsString, grapheme_break_test_txt: &PathB
     for line in grapheme_break_test.lines() {
         let line = line.unwrap();
         if let Some((map, comment)) = line.split_once('#') {
-            if map.len() > 0 {
+            if !map.is_empty() {
                 test_number += 1;
                 writeln!(grapheme_test_rs, "#[test]")?;
                 writeln!(grapheme_test_rs, "fn grapheme_cluster_test_{test_number}() {{")?;
@@ -202,7 +200,7 @@ fn build_grapheme_break_test(out_dir: &OsString, grapheme_break_test_txt: &PathB
                 for token in map.split_whitespace() {
                     match token {
                         "÷" => {
-                            if current_grapheme.len() > 0 {
+                            if !current_grapheme.is_empty() {
                                 output_string.push(current_grapheme);
                                 current_grapheme = String::new();
                             }
@@ -271,7 +269,7 @@ fn build_grapheme_break_property(out_dir: &OsString, grapheme_break_property_txt
     let derived_core_properties = BufReader::new(derived_core_properties);
 
     // first pass: build an array of all the properties
-    let mut raw_grapheme_properties = [0u8;0x110000];
+    let mut raw_grapheme_properties = vec![0u8;0x110000]; // heap: see build_character_tables
     for line in grapheme_break_property.lines() {
         let line = line.unwrap();
         if let Some((line, _)) = line.split_once('#') {
@@ -291,7 +289,16 @@ fn build_grapheme_break_property(out_dir: &OsString, grapheme_break_property_txt
                 let range = range.trim();
                 let property = property.trim();
                 if property == "Extended_Pictographic" {
-                    raw_grapheme_properties.get_mut(str_to_range(range)).unwrap().fill(0x06);
+                    // The table holds a single base property per character, so an ExtPict character
+                    // that also has its own Grapheme_Cluster_Break value can't be represented. That
+                    // doesn't happen in current Unicode data; fail loudly rather than silently
+                    // overwrite the GCB value if a future version changes that.
+                    let range = str_to_range(range);
+                    if let Some(c) = range.clone().find(|&c| raw_grapheme_properties[c] != 0) {
+                        anyhow::bail!("U+{c:04X} is Extended_Pictographic but also has Grapheme_Cluster_Break value {:#x}",
+                            raw_grapheme_properties[c]);
+                    }
+                    raw_grapheme_properties[range].fill(0x06);
                 }
             }
         }
@@ -328,16 +335,18 @@ fn build_grapheme_break_property(out_dir: &OsString, grapheme_break_property_txt
 
 fn write_data_tables(mut rust_file : File, raw_data: &[u8], table_name: &str, pages_name: &str) -> anyhow::Result<()> {
     writeln!(rust_file, "// GENERATED CODE DO NOT MANUALLY EDIT")?;
-    writeln!(rust_file, "pub const {table_name}: [u8;0x1100] = [")?;
+    // `static` rather than `const`: a `const` array is conceptually inlined at every use site,
+    // while a `static` guarantees a single copy of the table in the binary.
+    writeln!(rust_file, "pub static {table_name}: [u8;0x1100] = [")?;
     let mut page_index = HashMap::new();
-    let mut page_number = 0u8;
     for page in 0 .. 0x1100 {
         let page_start = page << 8;
         let page_data  = raw_data[page_start..page_start+0x100].to_vec();
-        let &mut page_ref = page_index.entry(page_data).or_insert(page_number);
-        if page_ref == page_number {
-            page_number += 1
-        }
+        let next_page = page_index.len();
+        let page_ref = *page_index.entry(page_data).or_insert(next_page);
+        // The index table stores page numbers as u8, so there can be at most 256 distinct pages.
+        let page_ref = u8::try_from(page_ref)
+            .map_err(|_| anyhow::anyhow!("{pages_name} needs more than 256 distinct pages; the {table_name} index would need to be widened to u16"))?;
         writeln!(rust_file, "\t {page_ref}, // {page:#x}")?;
     }
     writeln!(rust_file, "];")?;
@@ -346,7 +355,7 @@ fn write_data_tables(mut rust_file : File, raw_data: &[u8], table_name: &str, pa
         .sorted_by(|(a,_),(b,_)| Ord::cmp(a,b))
         .map(|(_, page)| page )
         .collect_vec();
-    writeln!(rust_file, "pub const {pages_name}: [[u8;256];{}] = {pages:#x?};", pages.len())?;
+    writeln!(rust_file, "pub static {pages_name}: [[u8;256];{}] = {pages:#x?};", pages.len())?;
     Ok(())
 }
 
@@ -354,9 +363,14 @@ fn download_unicode_data(local_txt_data_file: &PathBuf, remote_txt_data_file: &s
     let url_base = "https://www.unicode.org/Public/".to_owned() + unicode_version + "/";
     let client = Client::new();
     if !local_txt_data_file.exists() {
-        let mut remote_data = client.get(url_base.clone() + remote_txt_data_file).send()?;
-        let mut file = File::create(local_txt_data_file)?;
+        // Fail on an HTTP error rather than caching the error page as the data file, and write to
+        // a temporary file first so an interrupted download doesn't leave a truncated file that
+        // the `exists()` check above would treat as valid on the next run.
+        let mut remote_data = client.get(url_base + remote_txt_data_file).send()?.error_for_status()?;
+        let partial_file = local_txt_data_file.with_extension("partial");
+        let mut file = File::create(&partial_file)?;
         std::io::copy(&mut remote_data, &mut file)?;
+        std::fs::rename(&partial_file, local_txt_data_file)?;
     }
     Ok(())
 }

@@ -1,5 +1,5 @@
 // GENERATED CODE DO NOT MANUALLY EDIT
-pub const GP_TABLE: [u8;0x1100] = [
+pub static GP_TABLE: [u8;0x1100] = [
 	 0, // 0x0
 	 1, // 0x1
 	 1, // 0x2
@@ -4353,7 +4353,7 @@ pub const GP_TABLE: [u8;0x1100] = [
 	 1, // 0x10fe
 	 1, // 0x10ff
 ];
-pub const GP_PAGES: [[u8;256];111] = [
+pub static GP_PAGES: [[u8;256];111] = [
     [
         0x4,
         0x4,
